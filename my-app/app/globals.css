@@ -1,0 +1,27 @@
+@import "tailwindcss";
+
+@theme {
+  --color-ink: #141414;
+  --color-paper: #f7f6f3;
+  --color-accent: #f2994a;
+  --color-accent-dark: #d9822b;
+  --color-line: #e4e2dc;
+  --color-muted: #8a867c;
+  --color-surface: #ffffff;
+
+  --font-serif: var(--font-fraunces), serif;
+  --font-sans: var(--font-inter), sans-serif;
+
+  --radius-card: 20px;
+  --radius-pill: 999px;
+}
+
+html,
+body {
+  background-color: #f7f6f3;
+  color: #141414;
+}
+
+* {
+  -webkit-tap-highlight-color: transparent;
+}
