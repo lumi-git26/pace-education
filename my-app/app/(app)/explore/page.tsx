@@ -34,7 +34,7 @@ export default function ExplorePage() {
   const [topicIndex, setTopicIndex] = useState(0);
   const sentinelRef = useRef<HTMLDivElement>(null);
 
-  // Hiệu ứng đổi từ khóa Morphing
+  // Hiệu ứng đổi từ khóa Morphing mượt mà
   useEffect(() => {
     const interval = setInterval(() => {
       setTopicIndex((prev) => (prev + 1) % LEARNING_TOPICS.length);
@@ -113,137 +113,139 @@ export default function ExplorePage() {
   return (
     <div className="relative w-full min-h-screen">
       
-      {/* 1. LAYER BACKGROUND - Dotted Notebook, Decor & Gradient */}
-      <div className="fixed inset-0 -z-30 bg-[#EFEDE7]"
-           style={{ backgroundImage: "radial-gradient(#c8c8c8 1.5px, transparent 1.5px)", backgroundSize: "32px 32px" }} 
+      {/* 1. NỀN CHẤM BI (DOTTED NOTEBOOK) - Code CSS cực xịn đảm bảo 100% hiện thị sắc nét */}
+      <div 
+        className="fixed inset-0 -z-30 pointer-events-none"
+        style={{ 
+          backgroundColor: '#EFEDE7',
+          backgroundImage: 'radial-gradient(circle, rgba(0,0,0,0.12) 1.5px, transparent 1.5px)', 
+          backgroundSize: '24px 24px'
+        }} 
       />
       
-      {/* Các hình vẽ Study Decors (Notionish style) */}
-      <div className="fixed inset-0 -z-20 pointer-events-none opacity-[0.15]">
-        <Pencil className="absolute top-[20%] right-[15%] text-ink rotate-45 w-14 h-14" strokeWidth={1} />
-        <Ruler className="absolute bottom-[40%] left-[10%] text-ink -rotate-12 w-20 h-20" strokeWidth={1} />
-        <BookOpen className="absolute top-[15%] left-[20%] text-ink rotate-12 w-12 h-12" strokeWidth={1} />
-        <NotebookPen className="absolute bottom-[30%] right-[12%] text-ink -rotate-[20deg] w-16 h-16" strokeWidth={1} />
+      {/* Các hình vẽ Notionist tĩnh trang trí góc */}
+      <div className="fixed inset-0 -z-20 pointer-events-none opacity-20">
+        <Pencil className="absolute top-[25%] right-[12%] text-ink rotate-45 w-14 h-14" strokeWidth={1} />
+        <Ruler className="absolute bottom-[35%] left-[8%] text-ink -rotate-12 w-20 h-20" strokeWidth={1} />
+        <BookOpen className="absolute top-[18%] left-[18%] text-ink rotate-12 w-12 h-12" strokeWidth={1} />
+        <NotebookPen className="absolute bottom-[25%] right-[15%] text-ink -rotate-[20deg] w-16 h-16" strokeWidth={1} />
       </div>
 
-      {/* Gradient mờ đè lên để tạo ánh sáng không gian */}
-      <div className="fixed inset-0 -z-10 overflow-hidden pointer-events-none mix-blend-multiply opacity-60">
-        <div className="absolute top-[-20%] right-[-10%] w-[60%] h-[60%] bg-[#F2994A]/20 blur-[150px] rounded-full" />
-        <div className="absolute bottom-[-10%] left-[-10%] w-[50%] h-[70%] bg-[#C9A6E0]/20 blur-[150px] rounded-full" />
-        <div className="absolute top-[30%] left-[30%] w-[40%] h-[40%] bg-[#6FB1D6]/20 blur-[150px] rounded-full" />
+      {/* Background Gradient lơ lửng tạo chiều sâu */}
+      <div className="fixed inset-0 -z-10 overflow-hidden pointer-events-none mix-blend-multiply opacity-50">
+        <div className="absolute top-[-10%] right-[-10%] w-[50%] h-[50%] bg-[#F2994A]/25 blur-[120px] rounded-full" />
+        <div className="absolute bottom-[-10%] left-[-10%] w-[40%] h-[60%] bg-[#C9A6E0]/25 blur-[120px] rounded-full" />
+        <div className="absolute top-[40%] left-[30%] w-[30%] h-[30%] bg-[#6FB1D6]/20 blur-[120px] rounded-full" />
       </div>
 
-      {/* Điểm kích hoạt Morphing (Cắm ở 20% chiều cao màn hình) */}
-      <div ref={sentinelRef} className="absolute top-[20vh] h-10 w-full pointer-events-none" />
+      {/* Điểm kích hoạt Morphing */}
+      <div ref={sentinelRef} className="absolute top-[15vh] h-10 w-full pointer-events-none" />
 
-      {/* 2. STICKY HEADER (Trong suốt hơn, blur mượt hơn) */}
-      <div className={`sticky top-0 z-50 flex items-center justify-between px-6 pb-4 pt-4 bg-[#EFEDE7]/30 backdrop-blur-2xl transition-all duration-300 ${
+      {/* 2. STICKY HEADER - Kính mờ siêu mượt, opacity nhạt hơn */}
+      <div className={`fixed top-0 left-0 w-full z-50 flex items-center justify-between px-6 pb-4 pt-4 bg-[#EFEDE7]/20 backdrop-blur-xl border-b border-white/10 transition-all duration-300 ${
         isScrolled ? "opacity-100 translate-y-0" : "opacity-0 -translate-y-4 pointer-events-none"
       }`}>
         <div className="flex items-center gap-3 text-ink font-medium">
           <ArrowLeft size={20} className="cursor-pointer hover:text-accent transition-colors" />
           <span className="font-serif text-lg">Explore</span>
         </div>
-        <div className="w-72">
+        <div className="w-72 mr-4 md:mr-10">
           {isScrolled && <SearchBar size="small" />}
         </div>
       </div>
 
-      {/* 3. CENTER HERO SECTION (Sử dụng kỹ thuật pt-[50vh] để ép thanh Search luôn ở Center) */}
-      <div className="flex flex-col w-full px-6 pt-[50vh]">
+      {/* 3. HERO SECTION (SEARCH BAR CENTERED Ttuyệt đối) */}
+      <div className="absolute top-[50vh] left-1/2 w-full max-w-[800px] px-6 -translate-x-1/2 -translate-y-1/2 z-20">
         
-        {/* Khối Search + Message được kéo ngược lên đúng 28px (nửa chiều cao search bar) để nó nằm chính xác giữa màn hình */}
-        <div className="relative w-full max-w-[800px] mx-auto -mt-[28px] z-20">
+        {/* Cụm Text và Avatar (Nằm ngang 1 dòng, ghim sát mép trên thanh Search) */}
+        <div className="absolute bottom-[calc(100%+20px)] left-0 w-full flex flex-row items-end justify-start px-2">
           
-          {/* Cụm Text và Avatar (Nằm ngang 1 dòng, được neo chặt phía trên thanh Search) */}
-          <div className="absolute bottom-[calc(100%+16px)] left-0 w-full flex items-end whitespace-nowrap">
-            
-            {/* Avatar Notionist tĩnh, lùi sang trái 1 chút để nhường tâm điểm cho Text */}
-            <div className="w-40 h-40 shrink-0 mr-4 -ml-8">
-              <img 
-                src="https://api.dicebear.com/9.x/notionists/svg?seed=Books&backgroundColor=transparent" 
-                alt="Study Notionist"
-                className="w-full h-full object-contain"
-              />
-            </div>
-            
-            {/* Message với độ cao đủ để không bao giờ khuyết mất phần đuôi chữ "G" */}
-            <h1 className="font-serif text-[42px] font-semibold text-ink tracking-tight flex items-end pb-3">
-              <span>Today, I want to learn</span>
-              <div className="relative inline-block h-[80px] min-w-[300px] overflow-hidden ml-3">
-                <AnimatePresence mode="popLayout">
-                  <motion.span
-                    key={topicIndex}
-                    initial={{ y: 50, opacity: 0 }}
-                    animate={{ y: 0, opacity: 1 }}
-                    exit={{ y: -50, opacity: 0 }}
-                    transition={{ duration: 0.5, ease: "circOut" }}
-                    // Nâng chữ lên 15px so với đáy box để dư sức chứa các đuôi chữ rớt xuống
-                    className="absolute bottom-[15px] left-0 text-accent font-bold"
-                  >
-                    {LEARNING_TOPICS[topicIndex]}
-                  </motion.span>
-                </AnimatePresence>
-              </div>
-            </h1>
+          {/* Avatar Notionist đứng yên */}
+          <div className="w-32 h-32 md:w-36 md:h-36 shrink-0 mr-4 -ml-4 z-10">
+            <img 
+              src="https://api.dicebear.com/9.x/notionists/svg?seed=Books&backgroundColor=transparent" 
+              className="w-full h-full object-bottom drop-shadow-sm" 
+              alt="Student" 
+            />
           </div>
-
-          {/* Search Bar To (Vị trí tọa độ trung tâm tuyệt đối 100%) */}
-          {!isScrolled && <SearchBar size="large" />}
+          
+          {/* Message - Đã fix hoàn toàn lỗi rớt đuôi chữ "G" */}
+          <h1 className="font-serif text-[38px] md:text-[46px] font-semibold text-ink leading-none flex items-end pb-3">
+            <span className="mr-3">Today, I want to learn</span>
+            {/* Box chứa chữ Animated: min-w đủ to, align-bottom để nằm cùng baseline với chữ Today */}
+            <span className="relative inline-block h-[1.1em] min-w-[280px] overflow-hidden align-bottom">
+              <AnimatePresence mode="popLayout">
+                <motion.span 
+                  key={topicIndex}
+                  initial={{ y: "100%", opacity: 0 }}
+                  animate={{ y: "0%", opacity: 1 }}
+                  exit={{ y: "-100%", opacity: 0 }}
+                  transition={{ duration: 0.5, ease: "easeOut" }}
+                  // bottom-0 giúp các chữ như "English" tha hồ thò đuôi "g" xuống mà không bị cắt
+                  className="absolute bottom-0 left-0 text-accent font-bold pb-1"
+                >
+                  {LEARNING_TOPICS[topicIndex]}
+                </motion.span>
+              </AnimatePresence>
+            </span>
+          </h1>
         </div>
 
-        {/* Khoảng đệm lò xo đẩy phần Tab và Card xuống tít dưới mép màn hình */}
-        <div className="flex-1 min-h-[15vh]"></div>
+        {/* Thanh Search Bar (Nằm chính giữa tâm màn hình) */}
+        {!isScrolled && <SearchBar size="large" />}
+      </div>
 
-        {/* 4. TABS & CARDS PEEKING SECTION */}
-        <div className="w-full z-10 pb-32 mt-12">
-          
-          {/* Tabs */}
-          <div className="flex items-center gap-10 border-b border-line/80 pb-2 mb-6">
-            {TABS.map(({ key, label }) => (
-              <button
-                key={key}
-                onClick={() => setTab(key)}
-                className={[
-                  "relative pb-3 text-sm font-semibold transition-colors",
-                  tab === key ? "text-accent" : "text-muted hover:text-ink",
-                ].join(" ")}
-              >
-                {label}
-                {tab === key && (
-                  <motion.span 
-                    layoutId="active-tab"
-                    className="absolute -bottom-px left-0 right-0 h-[2px] bg-accent rounded-t-full" 
-                  />
-                )}
-              </button>
+      {/* 4. TABS & CARDS PEEKING SECTION */}
+      {/* Cục Spacer này sẽ đẩy nội dung xuống dưới mốc 82vh, tạo ra hiệu ứng "nhô lên 1 xíu" từ cạnh dưới màn hình */}
+      <div className="h-[82vh] w-full pointer-events-none" />
+      
+      <div className="w-full px-6 pb-32 z-10 relative">
+        
+        {/* Tabs */}
+        <div className="flex items-center gap-10 border-b border-line/80 pb-2 mb-6">
+          {TABS.map(({ key, label }) => (
+            <button
+              key={key}
+              onClick={() => setTab(key)}
+              className={[
+                "relative pb-3 text-sm font-semibold transition-colors",
+                tab === key ? "text-accent" : "text-muted hover:text-ink",
+              ].join(" ")}
+            >
+              {label}
+              {tab === key && (
+                <motion.span 
+                  layoutId="active-tab"
+                  className="absolute -bottom-px left-0 right-0 h-[2px] bg-accent rounded-t-full" 
+                />
+              )}
+            </button>
+          ))}
+        </div>
+
+        {/* Khóa học */}
+        {loading && (
+          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+            {[...Array(3)].map((_, i) => (
+              <div key={i} className="h-40 animate-pulse rounded-[24px] border border-line bg-surface/50" />
             ))}
           </div>
+        )}
 
-          {/* Khóa học nhô lên */}
-          {loading && (
-            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-              {[...Array(3)].map((_, i) => (
-                <div key={i} className="h-40 animate-pulse rounded-[24px] border border-line bg-surface/50" />
-              ))}
-            </div>
-          )}
+        {!loading && visible.length === 0 && (
+          <div className="rounded-[24px] border border-line bg-surface/50 backdrop-blur-md p-12 text-center text-sm text-muted shadow-sm">
+            <p className="text-lg mb-2 text-ink font-medium">No courses found 🌱</p>
+            {query ? `We couldn't find anything for "${query}"` : "Try adjusting your search."}
+          </div>
+        )}
 
-          {!loading && visible.length === 0 && (
-            <div className="rounded-[24px] border border-line bg-surface/50 backdrop-blur-md p-12 text-center text-sm text-muted">
-              <p className="text-lg mb-2">No courses found 🌱</p>
-              {query ? `We couldn't find anything for "${query}"` : "Try adjusting your search."}
-            </div>
-          )}
-
-          {!loading && visible.length > 0 && (
-            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 items-start">
-              {visible.map((course) => (
-                <CourseCard key={course.id} course={course} />
-              ))}
-            </div>
-          )}
-        </div>
+        {!loading && visible.length > 0 && (
+          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 items-start">
+            {visible.map((course) => (
+              <CourseCard key={course.id} course={course} />
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
