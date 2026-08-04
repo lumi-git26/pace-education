@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { useRouter } from "next/navigation"; // Bổ sung import useRouter
 import { supabase } from "@/lib/supabase/client";
 
 type Mode = "sign-in" | "sign-up";
@@ -23,7 +22,6 @@ const PANEL_COPY = {
 };
 
 export default function SignInPage() {
-  const router = useRouter(); // Khởi tạo router
   const [mode, setMode] = useState<Mode>("sign-in");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -43,10 +41,7 @@ export default function SignInPage() {
   async function handleGoogleSignIn() {
     await supabase.auth.signInWithOAuth({
       provider: "google",
-      options: { 
-        // Bổ sung ?next=/explore để chắc chắn luồng callback trơn tru
-        redirectTo: `${window.location.origin}/auth/callback?next=/explore` 
-      },
+      options: { redirectTo: `${window.location.origin}/auth/callback` },
     });
   }
 
@@ -62,8 +57,7 @@ export default function SignInPage() {
         password,
         options: {
           data: { full_name: fullName },
-          // Cũng nên thêm đích đến cho link xác nhận email
-          emailRedirectTo: `${window.location.origin}/auth/callback?next=/explore`,
+          emailRedirectTo: `${window.location.origin}/auth/callback`,
         },
       });
       if (error) setError(error.message);
@@ -73,13 +67,8 @@ export default function SignInPage() {
         email,
         password,
       });
-      if (error) {
-        setError(error.message);
-      } else {
-        // Cập nhật Cache cho Middleware, sau đó chuyển trang mượt mà
-        router.refresh();
-        router.push("/explore");
-      }
+      if (error) setError(error.message);
+      else window.location.href = "/explore";
     }
 
     setLoading(false);
@@ -150,7 +139,7 @@ export default function SignInPage() {
 
                 <button
                   onClick={handleGoogleSignIn}
-                  className="mt-8 flex w-full items-center justify-center gap-3 rounded-pill border border-line bg-surface py-3.5 text-sm font-medium text-ink shadow-sm transition-colors hover:bg-ink/5 cursor-pointer"
+                  className="mt-8 flex w-full items-center justify-center gap-3 rounded-pill border border-line bg-surface py-3.5 text-sm font-medium text-ink shadow-sm transition-colors hover:bg-ink/5"
                 >
                   <svg width="18" height="18" viewBox="0 0 18 18">
                     <path
@@ -222,15 +211,15 @@ export default function SignInPage() {
                     className="w-full rounded-pill border border-line bg-surface px-5 py-3 text-sm text-ink outline-none placeholder:text-muted focus:border-accent"
                   />
 
-                  {error && <p className="text-sm text-red-600 font-medium">{error}</p>}
+                  {error && <p className="text-sm text-red-600">{error}</p>}
                   {message && (
-                    <p className="text-sm text-green-700 font-medium">{message}</p>
+                    <p className="text-sm text-green-700">{message}</p>
                   )}
 
                   <button
                     type="submit"
                     disabled={loading}
-                    className="w-full rounded-pill bg-ink py-3.5 text-sm font-medium text-paper transition-opacity hover:opacity-90 disabled:opacity-50 cursor-pointer"
+                    className="w-full rounded-pill bg-ink py-3.5 text-sm font-medium text-paper transition-opacity hover:opacity-90 disabled:opacity-50"
                   >
                     {loading
                       ? "Please wait…"
@@ -246,7 +235,7 @@ export default function SignInPage() {
                       Don&apos;t have an account?{" "}
                       <button
                         onClick={() => switchMode("sign-up")}
-                        className="font-medium text-ink underline underline-offset-2 cursor-pointer"
+                        className="font-medium text-ink underline underline-offset-2"
                       >
                         Sign up
                       </button>
@@ -256,7 +245,7 @@ export default function SignInPage() {
                       Already have an account?{" "}
                       <button
                         onClick={() => switchMode("sign-in")}
-                        className="font-medium text-ink underline underline-offset-2 cursor-pointer"
+                        className="font-medium text-ink underline underline-offset-2"
                       >
                         Sign in
                       </button>
