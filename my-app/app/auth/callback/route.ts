@@ -31,7 +31,12 @@ export async function GET(request: Request) {
     if (!error) {
       return NextResponse.redirect(`${origin}${next}`);
     }
+
+    // TEMP: surface the real error so we can see what's failing
+    return NextResponse.redirect(
+      `${origin}/sign-in?error=auth_failed&reason=${encodeURIComponent(error.message)}`
+    );
   }
 
-  return NextResponse.redirect(`${origin}/sign-in?error=auth_failed`);
+  return NextResponse.redirect(`${origin}/sign-in?error=no_code`);
 }
