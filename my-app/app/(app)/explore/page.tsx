@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, useRef } from "react";
-import { Search, ArrowLeft } from "lucide-react";
+import { Search, ArrowLeft, Pencil, Ruler, BookOpen, NotebookPen } from "lucide-react";
 import { supabase } from "@/lib/supabase/client";
 import CourseCard, { CourseCardData } from "@/components/CourseCard";
 import { motion, AnimatePresence } from "framer-motion";
@@ -16,7 +16,7 @@ const TABS: { key: Tab; label: string }[] = [
 
 const LEARNING_TOPICS = ["IELTS", "Finance", "English", "Spanish", "Data Analysis"];
 
-// Dữ liệu giả (Mock Data) để cậu test giao diện thẻ khóa học khi DB trống
+// Dữ liệu Mock Data để cậu test giao diện
 const MOCK_COURSES: CourseCardData[] = [
   { id: 'mock-1', title: 'IELTS Mastery: Band 8.0+', publisherName: 'Kira', lessonCount: 24, hoursToComplete: 40 },
   { id: 'mock-2', title: 'Corporate Finance 101', publisherName: 'Pace Education', lessonCount: 12, hoursToComplete: 15 },
@@ -34,7 +34,7 @@ export default function ExplorePage() {
   const [topicIndex, setTopicIndex] = useState(0);
   const sentinelRef = useRef<HTMLDivElement>(null);
 
-  // Hiệu ứng đổi từ khóa
+  // Hiệu ứng đổi từ khóa Morphing
   useEffect(() => {
     const interval = setInterval(() => {
       setTopicIndex((prev) => (prev + 1) % LEARNING_TOPICS.length);
@@ -42,12 +42,10 @@ export default function ExplorePage() {
     return () => clearInterval(interval);
   }, []);
 
-  // Fetch Data + Mock Data Fallback
   useEffect(() => {
     let cancelled = false;
     async function fetchCourses() {
       setLoading(true);
-      setError(null);
       const { data, error } = await supabase
         .from("courses")
         .select("id, title, status, created_at, profiles(full_name)")
@@ -56,15 +54,9 @@ export default function ExplorePage() {
 
       if (cancelled) return;
       
-      if (error) {
-        setError(error.message);
-        setCourses(MOCK_COURSES); // Nếu lỗi DB, hiện Mock Data để test UI
-        setLoading(false);
-        return;
-      }
-
-      // Nếu có data thật thì dùng, không thì tự động fallback về Mock Data
-      if (data && data.length > 0) {
+      if (error || !data || data.length === 0) {
+        setCourses(MOCK_COURSES);
+      } else {
         const mapped: CourseCardData[] = data.map((row: any) => ({
           id: row.id,
           title: row.title,
@@ -73,18 +65,14 @@ export default function ExplorePage() {
           hoursToComplete: Math.floor(Math.random() * 40) + 20,
         }));
         setCourses(mapped);
-      } else {
-        setCourses(MOCK_COURSES);
       }
-      
       setLoading(false);
     }
-
     fetchCourses();
     return () => { cancelled = true; };
   }, []);
 
-  // Theo dõi cuộn trang
+  // Bắt sự kiện cuộn để thu nhỏ Header
   useEffect(() => {
     const observer = new IntersectionObserver(
       ([entry]) => setIsScrolled(!entry.isIntersecting),
@@ -100,6 +88,7 @@ export default function ExplorePage() {
     );
   }, [courses, query]);
 
+  // Thanh Search dùng chung (Tự Morph khi cuộn)
   const SearchBar = ({ className, size = "large" }: { className?: string, size?: "large" | "small" }) => (
     <motion.div layoutId="search-bar" className={`relative w-full ${className}`} initial={false}>
       <input
@@ -122,22 +111,33 @@ export default function ExplorePage() {
   );
 
   return (
-    <div className="relative w-full">
-      {/* 1. Hình ảnh trang trí Gradient nền phía sau (Fixed full màn hình) */}
-      <div className="fixed inset-0 -z-10 bg-[#EFEDE7] overflow-hidden">
-        {/* Vệt cam góc trên */}
-        <div className="absolute top-[-10%] right-[10%] w-[50%] h-[50%] rounded-full bg-[#F2994A]/20 blur-[120px]" />
-        {/* Vệt tím góc trái */}
-        <div className="absolute top-[20%] left-[-10%] w-[40%] h-[60%] rounded-full bg-[#C9A6E0]/20 blur-[120px]" />
-        {/* Vệt xanh lơ góc dưới */}
-        <div className="absolute bottom-[-10%] left-[30%] w-[60%] h-[50%] rounded-full bg-[#6FB1D6]/20 blur-[120px]" />
+    <div className="relative w-full min-h-screen">
+      
+      {/* 1. LAYER BACKGROUND - Dotted Notebook, Decor & Gradient */}
+      <div className="fixed inset-0 -z-30 bg-[#EFEDE7]"
+           style={{ backgroundImage: "radial-gradient(#c8c8c8 1.5px, transparent 1.5px)", backgroundSize: "32px 32px" }} 
+      />
+      
+      {/* Các hình vẽ Study Decors (Notionish style) */}
+      <div className="fixed inset-0 -z-20 pointer-events-none opacity-[0.15]">
+        <Pencil className="absolute top-[20%] right-[15%] text-ink rotate-45 w-14 h-14" strokeWidth={1} />
+        <Ruler className="absolute bottom-[40%] left-[10%] text-ink -rotate-12 w-20 h-20" strokeWidth={1} />
+        <BookOpen className="absolute top-[15%] left-[20%] text-ink rotate-12 w-12 h-12" strokeWidth={1} />
+        <NotebookPen className="absolute bottom-[30%] right-[12%] text-ink -rotate-[20deg] w-16 h-16" strokeWidth={1} />
       </div>
 
-      {/* 2. Sentinel để bắt sự kiện cuộn (đặt cách top 20vh) */}
+      {/* Gradient mờ đè lên để tạo ánh sáng không gian */}
+      <div className="fixed inset-0 -z-10 overflow-hidden pointer-events-none mix-blend-multiply opacity-60">
+        <div className="absolute top-[-20%] right-[-10%] w-[60%] h-[60%] bg-[#F2994A]/20 blur-[150px] rounded-full" />
+        <div className="absolute bottom-[-10%] left-[-10%] w-[50%] h-[70%] bg-[#C9A6E0]/20 blur-[150px] rounded-full" />
+        <div className="absolute top-[30%] left-[30%] w-[40%] h-[40%] bg-[#6FB1D6]/20 blur-[150px] rounded-full" />
+      </div>
+
+      {/* Điểm kích hoạt Morphing (Cắm ở 20% chiều cao màn hình) */}
       <div ref={sentinelRef} className="absolute top-[20vh] h-10 w-full pointer-events-none" />
 
-      {/* 3. Sticky Header (Chỉ hiện khi cuộn) */}
-      <div className={`sticky top-0 z-50 flex items-center justify-between px-6 pb-4 pt-4 bg-[#EFEDE7]/60 backdrop-blur-xl transition-all duration-300 ${
+      {/* 2. STICKY HEADER (Trong suốt hơn, blur mượt hơn) */}
+      <div className={`sticky top-0 z-50 flex items-center justify-between px-6 pb-4 pt-4 bg-[#EFEDE7]/30 backdrop-blur-2xl transition-all duration-300 ${
         isScrolled ? "opacity-100 translate-y-0" : "opacity-0 -translate-y-4 pointer-events-none"
       }`}>
         <div className="flex items-center gap-3 text-ink font-medium">
@@ -149,99 +149,101 @@ export default function ExplorePage() {
         </div>
       </div>
 
-      {/* 4. Main Section (Chiếm 85% chiều cao màn hình để thẻ khóa học lấp ló bên dưới) */}
-      <div className="flex flex-col min-h-[85vh] px-6">
+      {/* 3. CENTER HERO SECTION (Sử dụng kỹ thuật pt-[50vh] để ép thanh Search luôn ở Center) */}
+      <div className="flex flex-col w-full px-6 pt-[50vh]">
         
-        {/* Khối Hero căn giữa tuyệt đối cả dọc lẫn ngang */}
-        <motion.div 
-          className="flex-1 flex flex-col md:flex-row items-center justify-center gap-10"
-          animate={{ opacity: isScrolled ? 0 : 1, scale: isScrolled ? 0.95 : 1 }}
-          transition={{ duration: 0.3 }}
-        >
-          {/* Avatar phác thảo tối giản */}
-          <div className="w-48 h-48 md:w-56 md:h-56 shrink-0 flex items-center justify-center">
-            <motion.img 
-              src="https://api.dicebear.com/9.x/notionists/svg?seed=Kira&backgroundColor=transparent&scale=120" 
-              alt="Study Character"
-              className="w-full h-full object-contain"
-              animate={{ y: [0, -8, 0] }} 
-              transition={{ repeat: Infinity, duration: 4, ease: "easeInOut" }}
-            />
-          </div>
-
-          {/* Text & Search Bar */}
-          <div className="flex-1 w-full max-w-2xl text-left">
-            <h1 className="font-serif text-4xl md:text-5xl font-semibold text-ink tracking-tight mb-8 flex flex-wrap items-center gap-x-3">
+        {/* Khối Search + Message được kéo ngược lên đúng 28px (nửa chiều cao search bar) để nó nằm chính xác giữa màn hình */}
+        <div className="relative w-full max-w-[800px] mx-auto -mt-[28px] z-20">
+          
+          {/* Cụm Text và Avatar (Nằm ngang 1 dòng, được neo chặt phía trên thanh Search) */}
+          <div className="absolute bottom-[calc(100%+16px)] left-0 w-full flex items-end whitespace-nowrap">
+            
+            {/* Avatar Notionist tĩnh, lùi sang trái 1 chút để nhường tâm điểm cho Text */}
+            <div className="w-40 h-40 shrink-0 mr-4 -ml-8">
+              <img 
+                src="https://api.dicebear.com/9.x/notionists/svg?seed=Books&backgroundColor=transparent" 
+                alt="Study Notionist"
+                className="w-full h-full object-contain"
+              />
+            </div>
+            
+            {/* Message với độ cao đủ để không bao giờ khuyết mất phần đuôi chữ "G" */}
+            <h1 className="font-serif text-[42px] font-semibold text-ink tracking-tight flex items-end pb-3">
               <span>Today, I want to learn</span>
-              <div className="inline-block relative h-[50px] min-w-[280px] overflow-hidden align-bottom">
+              <div className="relative inline-block h-[80px] min-w-[300px] overflow-hidden ml-3">
                 <AnimatePresence mode="popLayout">
                   <motion.span
                     key={topicIndex}
-                    initial={{ y: 40, opacity: 0 }}
+                    initial={{ y: 50, opacity: 0 }}
                     animate={{ y: 0, opacity: 1 }}
-                    exit={{ y: -40, opacity: 0 }}
+                    exit={{ y: -50, opacity: 0 }}
                     transition={{ duration: 0.5, ease: "circOut" }}
-                    className="absolute left-0 text-accent font-bold whitespace-nowrap"
+                    // Nâng chữ lên 15px so với đáy box để dư sức chứa các đuôi chữ rớt xuống
+                    className="absolute bottom-[15px] left-0 text-accent font-bold"
                   >
                     {LEARNING_TOPICS[topicIndex]}
                   </motion.span>
                 </AnimatePresence>
               </div>
             </h1>
-
-            <div className="w-full">
-              {!isScrolled && <SearchBar size="large" />}
-            </div>
           </div>
-        </motion.div>
 
-        {/* Tabs - Nằm sát mép dưới của khung 85vh */}
-        <div className="flex items-center gap-10 border-b border-line/80 mt-auto pb-2">
-          {TABS.map(({ key, label }) => (
-            <button
-              key={key}
-              onClick={() => setTab(key)}
-              className={[
-                "relative pb-3 text-sm font-semibold transition-colors",
-                tab === key ? "text-accent" : "text-muted hover:text-ink",
-              ].join(" ")}
-            >
-              {label}
-              {tab === key && (
-                <motion.span 
-                  layoutId="active-tab"
-                  className="absolute -bottom-px left-0 right-0 h-[2px] bg-accent rounded-t-full" 
-                />
-              )}
-            </button>
-          ))}
+          {/* Search Bar To (Vị trí tọa độ trung tâm tuyệt đối 100%) */}
+          {!isScrolled && <SearchBar size="large" />}
         </div>
-      </div>
 
-      {/* 5. Course Section (Phần này sẽ nhô lên một xíu ở mép dưới màn hình) */}
-      <div className="px-6 mt-8 pb-32">
-        {loading && (
-          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-            {[...Array(3)].map((_, i) => (
-              <div key={i} className="h-40 animate-pulse rounded-[24px] border border-line bg-surface/50" />
+        {/* Khoảng đệm lò xo đẩy phần Tab và Card xuống tít dưới mép màn hình */}
+        <div className="flex-1 min-h-[15vh]"></div>
+
+        {/* 4. TABS & CARDS PEEKING SECTION */}
+        <div className="w-full z-10 pb-32 mt-12">
+          
+          {/* Tabs */}
+          <div className="flex items-center gap-10 border-b border-line/80 pb-2 mb-6">
+            {TABS.map(({ key, label }) => (
+              <button
+                key={key}
+                onClick={() => setTab(key)}
+                className={[
+                  "relative pb-3 text-sm font-semibold transition-colors",
+                  tab === key ? "text-accent" : "text-muted hover:text-ink",
+                ].join(" ")}
+              >
+                {label}
+                {tab === key && (
+                  <motion.span 
+                    layoutId="active-tab"
+                    className="absolute -bottom-px left-0 right-0 h-[2px] bg-accent rounded-t-full" 
+                  />
+                )}
+              </button>
             ))}
           </div>
-        )}
 
-        {!loading && visible.length === 0 && (
-          <div className="rounded-[24px] border border-line bg-surface/50 backdrop-blur-md p-12 text-center text-sm text-muted">
-            <p className="text-lg mb-2">No courses found 🌱</p>
-            {query ? `We couldn't find anything for "${query}"` : "Try adjusting your search."}
-          </div>
-        )}
+          {/* Khóa học nhô lên */}
+          {loading && (
+            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+              {[...Array(3)].map((_, i) => (
+                <div key={i} className="h-40 animate-pulse rounded-[24px] border border-line bg-surface/50" />
+              ))}
+            </div>
+          )}
 
-        {!loading && visible.length > 0 && (
-          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 items-start">
-            {visible.map((course) => (
-              <CourseCard key={course.id} course={course} />
-            ))}
-          </div>
-        )}
+          {!loading && visible.length === 0 && (
+            <div className="rounded-[24px] border border-line bg-surface/50 backdrop-blur-md p-12 text-center text-sm text-muted">
+              <p className="text-lg mb-2">No courses found 🌱</p>
+              {query ? `We couldn't find anything for "${query}"` : "Try adjusting your search."}
+            </div>
+          )}
+
+          {!loading && visible.length > 0 && (
+            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 items-start">
+              {visible.map((course) => (
+                <CourseCard key={course.id} course={course} />
+              ))}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
