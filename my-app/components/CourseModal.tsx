@@ -24,7 +24,7 @@ export default function CourseModal({
   useEffect(() => {
     setMounted(true);
     document.body.style.overflow = "hidden";
-    
+
     return () => {
       document.body.style.overflow = "unset";
     };
@@ -70,9 +70,8 @@ export default function CourseModal({
             <X size={18} />
           </button>
 
-          {/* CỘT TRÁI - CHI TIẾT KHÓA HỌC */}
+          {/* LEFT COLUMN - COURSE DETAILS */}
           <div className="relative w-full md:w-1/2 flex flex-col h-full overflow-hidden">
-            
             <AnimatePresence>
               {isTitleScrolled && (
                 <motion.div
@@ -92,7 +91,7 @@ export default function CourseModal({
               )}
             </AnimatePresence>
 
-            <div 
+            <div
               onScroll={handleScroll}
               className="flex-1 overflow-y-auto p-8 md:p-12 pb-10"
             >
@@ -104,7 +103,10 @@ export default function CourseModal({
                 {course.title}
               </h2>
               <p className="text-sm text-muted mb-6">
-                Published by <span className="text-ink font-medium">{course.publisherName}</span>
+                Published by{" "}
+                <span className="text-ink font-medium">
+                  {course.publisherName}
+                </span>
               </p>
 
               <div className="flex items-center gap-4 mb-8 text-sm text-ink">
@@ -120,7 +122,7 @@ export default function CourseModal({
                 Welcome & Overview
               </h3>
               <p className="text-[15px] leading-7 text-ink/80 whitespace-pre-line">
-                {course.description || "Welcome to this advanced preparation course designed to push your skills to the next level. Throughout these modules, we will focus deeply on nuanced listening patterns, mastering connected speech, and precise word identification to ensure you catch every detail. Beyond that, you will engage with intensive reading strategies and structured frameworks to solidify your foundation. Whether your goal is academic excellence or professional advancement, this curriculum provides the rigorous practice needed to succeed. Dive into the exercises, test your limits, and let’s start building your path to top-tier results today."}
+                {course.description || "No overview available yet."}
               </p>
             </div>
 
@@ -135,7 +137,7 @@ export default function CourseModal({
             </div>
           </div>
 
-          {/* CỘT PHẢI - WHAT'S INSIDE */}
+          {/* RIGHT COLUMN - WHAT'S INSIDE */}
           <div className="w-full md:w-1/2 bg-white/60 border-t md:border-t-0 md:border-l border-line/60 p-8 md:p-12 overflow-y-auto h-full relative">
             <h3 className="text-xs font-bold text-muted uppercase tracking-wider mb-5">
               What&apos;s inside
@@ -169,25 +171,29 @@ export default function CourseModal({
                           key={lesson.id}
                           className="flex items-center gap-2.5 text-sm text-ink/80"
                         >
-                          <PlayCircle size={15} className="text-accent shrink-0" />
+                          <PlayCircle
+                            size={15}
+                            className="text-accent shrink-0"
+                          />
                           {lesson.title}
                         </li>
                       ))}
-                      
-                      {/* BÀI HỌC BỊ KHÓA BÊN TRONG UNIT */}
+
                       {lockedLessonCount > 0 && (
                         <li className="relative mt-2 overflow-hidden rounded-lg select-none -mx-2 py-2">
-                          {/* Lớp nền giả bị làm mờ */}
                           <div className="flex items-center gap-2.5 text-sm text-ink/40 blur-[2px] px-2">
-                            <PlayCircle size={15} className="text-accent/40 shrink-0" />
+                            <PlayCircle
+                              size={15}
+                              className="text-accent/40 shrink-0"
+                            />
                             Lesson {visibleLessons.length + 1}
                           </div>
-                          
-                          {/* Lớp Kính mờ phủ lên + Icon và Text căn giữa hoàn toàn không có khung */}
+
                           <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/50 backdrop-blur-[1.5px]">
                             <div className="flex items-center gap-1.5 text-[13px] font-semibold text-ink/80">
                               <Lock size={14} className="text-muted" />
-                              {lockedLessonCount} more lesson{lockedLessonCount > 1 ? "s" : ""}
+                              {lockedLessonCount} more lesson
+                              {lockedLessonCount > 1 ? "s" : ""}
                             </div>
                           </div>
                         </li>
@@ -197,10 +203,8 @@ export default function CourseModal({
                 );
               })}
 
-              {/* CÁC UNIT BỊ KHÓA Ở DƯỚI CÙNG */}
               {lockedUnitCount > 0 && (
                 <div className="relative rounded-2xl border border-line/60 bg-white/40 p-5 overflow-hidden select-none min-h-[120px]">
-                  {/* Lớp nền giả bị làm mờ */}
                   <div className="opacity-30 blur-[3px]">
                     <p className="text-sm font-semibold text-ink mb-3">
                       Unit {visibleUnits.length + 1}: Locked Module
@@ -215,7 +219,6 @@ export default function CourseModal({
                     </ul>
                   </div>
 
-                  {/* Lớp Kính mờ phủ lên + Icon và Text căn giữa hoàn toàn không có khung */}
                   <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/50 backdrop-blur-[2px]">
                     <div className="flex items-center gap-2 text-sm font-bold text-ink/90">
                       <Lock size={16} className="text-muted" />

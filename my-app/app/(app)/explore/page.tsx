@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, useRef } from "react";
+import Link from "next/link";
 import { Search, ArrowLeft } from "lucide-react";
 import { supabase } from "@/lib/supabase/client";
 import CourseCard, { CourseCardData } from "@/components/CourseCard";
@@ -26,7 +27,6 @@ export default function ExplorePage() {
   const [isScrolled, setIsScrolled] = useState(false);
   const searchBarRef = useRef<HTMLDivElement>(null);
 
-  // --- TYPING EFFECT ---
   const [text, setText] = useState("");
   const [isDeleting, setIsDeleting] = useState(false);
   const [topicIndex, setTopicIndex] = useState(0);
@@ -37,9 +37,10 @@ export default function ExplorePage() {
     const fullText = LEARNING_TOPICS[topicIndex];
 
     const handleTyping = () => {
-      setText(isDeleting
-        ? fullText.substring(0, text.length - 1)
-        : fullText.substring(0, text.length + 1)
+      setText(
+        isDeleting
+          ? fullText.substring(0, text.length - 1)
+          : fullText.substring(0, text.length + 1)
       );
 
       setTypingSpeed(isDeleting ? 40 : 100);
@@ -59,8 +60,6 @@ export default function ExplorePage() {
     return () => clearTimeout(timer);
   }, [text, isDeleting, topicIndex, typingSpeed]);
 
-  // Fetch real data — includes lesson content so the modal can show
-  // a real "Welcome & Overview" pulled from the course's first lesson.
   useEffect(() => {
     let cancelled = false;
     async function fetchCourses() {
@@ -129,7 +128,6 @@ export default function ExplorePage() {
     };
   }, []);
 
-  // Scroll listener
   useEffect(() => {
     const observer = new IntersectionObserver(
       ([entry]) => {
@@ -176,8 +174,8 @@ export default function ExplorePage() {
       <div
         className="fixed inset-0 -z-30 pointer-events-none bg-[#F9F9F8]"
         style={{
-          backgroundImage: 'radial-gradient(#D1D1D1 1.5px, transparent 1.5px)',
-          backgroundSize: '36px 36px'
+          backgroundImage: "radial-gradient(#D1D1D1 1.5px, transparent 1.5px)",
+          backgroundSize: "36px 36px",
         }}
       />
 
@@ -186,13 +184,18 @@ export default function ExplorePage() {
         <div className="absolute bottom-[20%] left-[10%] w-[40%] h-[50%] bg-[#C9A6E0]/30 blur-[150px] rounded-full" />
       </div>
 
-      <div className={`fixed top-0 left-0 w-full z-50 flex items-center justify-between px-8 pb-4 pt-6 bg-[#F9F9F8]/60 backdrop-blur-xl transition-all duration-300 ${
-        isScrolled ? "border-b border-line/50 shadow-sm" : "border-b border-transparent"
-      }`}>
-        <div className="flex items-center gap-4 text-ink font-medium">
-          <ArrowLeft size={20} className="cursor-pointer hover:text-accent transition-colors" />
+      <div
+        className={`fixed top-0 left-0 w-full z-50 flex items-center justify-between px-8 pb-4 pt-6 bg-[#F9F9F8]/60 backdrop-blur-xl transition-all duration-300 ${
+          isScrolled ? "border-b border-line/50 shadow-sm" : "border-b border-transparent"
+        }`}
+      >
+        <Link
+          href="/personal"
+          className="flex items-center gap-4 text-ink font-medium hover:text-accent transition-colors"
+        >
+          <ArrowLeft size={20} />
           <span className="font-serif text-lg">Explore</span>
-        </div>
+        </Link>
 
         <div className="h-10 w-80 mr-4 md:mr-10 flex items-center justify-end">
           <AnimatePresence>
@@ -265,7 +268,10 @@ export default function ExplorePage() {
         {loading && (
           <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
             {[...Array(6)].map((_, i) => (
-              <div key={i} className="h-56 animate-pulse rounded-[32px] border border-line bg-white/40" />
+              <div
+                key={i}
+                className="h-56 animate-pulse rounded-[32px] border border-line bg-white/40"
+              />
             ))}
           </div>
         )}
