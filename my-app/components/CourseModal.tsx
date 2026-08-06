@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Lock, PlayCircle, Clock, BookOpen, Check } from "lucide-react";
+import { X, Lock, PlayCircle, Clock, BookOpen } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase/client";
 import { CourseCardData } from "./CourseCard";
@@ -31,16 +31,16 @@ export default function CourseModal({
   useEffect(() => {
     setMounted(true);
     document.body.style.overflow = "hidden";
-
     return () => {
       document.body.style.overflow = "unset";
     };
   }, []);
 
+  // Log this as a "recent view" for the Recent tab, and check enrollment.
   useEffect(() => {
     let cancelled = false;
 
-    async function checkEnrollment() {
+    async function init() {
       setCheckingEnrollment(true);
       const {
         data: { user },
@@ -50,6 +50,11 @@ export default function CourseModal({
         setCheckingEnrollment(false);
         return;
       }
+
+      supabase
+        .from("course_views")
+        .insert({ learner_id: user.id, course_id: course.id })
+        .then(() => {});
 
       const { data } = await supabase
         .from("enrollments")
@@ -64,7 +69,7 @@ export default function CourseModal({
       }
     }
 
-    checkEnrollment();
+    init();
     return () => {
       cancelled = true;
     };
@@ -146,7 +151,6 @@ export default function CourseModal({
             <X size={18} />
           </button>
 
-          {/* LEFT COLUMN - COURSE DETAILS */}
           <div className="relative w-full md:w-1/2 flex flex-col h-full overflow-hidden">
             <AnimatePresence>
               {isTitleScrolled && (
@@ -232,7 +236,6 @@ export default function CourseModal({
             </div>
           </div>
 
-          {/* RIGHT COLUMN - WHAT'S INSIDE */}
           <div className="w-full md:w-1/2 bg-white/60 border-t md:border-t-0 md:border-l border-line/60 p-8 md:p-12 overflow-y-auto h-full relative">
             <h3 className="text-xs font-bold text-muted uppercase tracking-wider mb-5">
               What&apos;s inside

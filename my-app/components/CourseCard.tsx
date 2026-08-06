@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { ArrowUpRight, PlayCircle, Link, Mail, Flame, Check } from "lucide-react";
+import { ArrowUpRight, PlayCircle, Users, Flame, Check } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase/client";
 import CourseModal from "./CourseModal";
@@ -21,6 +21,8 @@ export interface CourseCardData {
   lessonCount?: number;
   hoursToComplete?: number;
   units?: UnitPreview[];
+  enrolledCount?: number;
+  isHot?: boolean;
 }
 
 export default function CourseCard({ course }: { course: CourseCardData }) {
@@ -102,24 +104,20 @@ export default function CourseCard({ course }: { course: CourseCardData }) {
         </div>
 
         <div className="flex items-center justify-between">
-          <div className="flex gap-2">
-            <span className="px-3.5 py-1.5 bg-ink/5 rounded-full text-xs font-semibold text-ink flex items-center gap-1.5">
-              <Link size={12} /> Source
-            </span>
-            <span className="px-3.5 py-1.5 bg-ink/5 rounded-full text-xs font-semibold text-ink flex items-center gap-1.5">
-              <Mail size={12} /> Contact
-            </span>
-          </div>
+          <span className="px-3.5 py-1.5 bg-ink/5 rounded-full text-xs font-semibold text-ink flex items-center gap-1.5">
+            <Users size={12} />
+            {course.enrolledCount ?? 0} enrolled
+          </span>
 
           {isEnrolled ? (
             <div className="flex items-center gap-1 text-xs font-bold text-green-600 bg-green-600/10 px-3 py-1.5 rounded-full">
               <Check size={14} /> Enrolled
             </div>
-          ) : (
+          ) : course.isHot ? (
             <div className="flex items-center gap-1 text-xs font-bold text-orange-500 bg-orange-500/10 px-3 py-1.5 rounded-full">
               <Flame size={14} /> Hot
             </div>
-          )}
+          ) : null}
         </div>
 
         <AnimatePresence>

@@ -3,7 +3,15 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase/client";
-import { Lock, PlayCircle, ArrowLeft } from "lucide-react";
+import { useProfile } from "@/lib/supabase/useProfile";
+import {
+  Lock,
+  PlayCircle,
+  ArrowLeft,
+  Search,
+  ChevronDown,
+  CheckCircle2,
+} from "lucide-react";
 import Link from "next/link";
 
 type Lesson = { id: string; title: string; order_index: number };
@@ -18,12 +26,15 @@ type CourseDetail = {
 export default function CourseDetailPage() {
   const params = useParams();
   const router = useRouter();
+  const { profile } = useProfile();
   const courseId = params.courseId as string;
 
   const [course, setCourse] = useState<CourseDetail | null>(null);
   const [isEnrolled, setIsEnrolled] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [openUnitId, setOpenUnitId] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -79,9 +90,9 @@ export default function CourseDetailPage() {
         .sort((a: any, b: any) => a.order_index - b.order_index)
         .map((u: any) => ({
           ...u,
-          lessons: (u.lessons ?? []).slice().sort(
-            (a: any, b: any) => a.order_index - b.order_index
-          ),
+          lessons: (u.lessons ?? [])
+            .slice()
+            .sort((a: any, b: any) => a.order_index - b.order_index),
         }));
 
       setCourse({
@@ -90,6 +101,7 @@ export default function CourseDetailPage() {
         description: data.description,
         units: sortedUnits,
       });
+      setOpenUnitId(sortedUnits[0]?.id ?? null);
       setLoading(false);
     }
 
@@ -98,6 +110,17 @@ export default function CourseDetailPage() {
       cancelled = true;
     };
   }, [courseId, router]);
+
+  const firstName = profile?.full_name?.split(" ")[0] ?? "there";
+
+  // First lesson of the first unit — placeholder "next up" logic until
+  // real lesson-completion tracking exists.
+  const nextLesson =
+    course?.units?.[0]?.lessons?.[0] ?? null;
+  const nextUnit = course?.units?.[0] ?? null;
+
+  const totalLessons =
+    course?.units.reduce((sum, u) => sum + u.lessons.length, 0) ?? 0;
 
   if (loading) {
     return (
@@ -138,8 +161,22 @@ export default function CourseDetailPage() {
     );
   }
 
+  const filteredUnits = course.units
+    .map((unit) => ({
+      ...unit,
+      lessons: unit.lessons.filter((l) =>
+        l.title.toLowerCase().includes(search.toLowerCase())
+      ),
+    }))
+    .filter(
+      (unit) =>
+        !search ||
+        unit.title.toLowerCase().includes(search.toLowerCase()) ||
+        unit.lessons.length > 0
+    );
+
   return (
-    <div className="min-h-screen w-full px-8 py-16 lg:px-16">
+    <div className="min-h-screen w-full px-8 py-10 lg:px-16">
       <Link
         href="/courses"
         className="inline-flex items-center gap-2 text-sm font-medium text-muted hover:text-ink transition-colors mb-8"
@@ -147,37 +184,147 @@ export default function CourseDetailPage() {
         <ArrowLeft size={16} /> Back to your courses
       </Link>
 
-      <h1 className="font-serif text-4xl font-semibold text-ink mb-3">
-        {course.title}
-      </h1>
-      {course.description && (
-        <p className="text-[15px] text-ink/70 max-w-2xl mb-10">
-          {course.description}
-        </p>
-      )}
-
-      <div className="space-y-4 max-w-2xl">
-        {course.units.map((unit, unitIdx) => (
-          <div
-            key={unit.id}
-            className="rounded-2xl border border-line/60 bg-white/70 p-5"
-          >
-            <p className="text-sm font-semibold text-ink mb-3">
-              Unit {unitIdx + 1}: {unit.title}
-            </p>
-            <ul className="space-y-2.5">
-              {unit.lessons.map((lesson) => (
-                <li
-                  key={lesson.id}
-                  className="flex items-center gap-2.5 text-sm text-ink/80"
-                >
-                  <PlayCircle size={15} className="text-accent shrink-0" />
-                  {lesson.title}
-                </li>
-              ))}
-            </ul>
+      <div className="rounded-[32px] bg-white/50 backdrop-blur-xl border border-white/60 shadow-sm p-8 md:p-10">
+        {/* Header */}
+        <div className="flex flex-wrap items-start justify-between gap-6 mb-8">
+          <div>
+            <h1 className="font-serif text-3xl font-semibold text-ink mb-2">
+              Welcome, {firstName}
+            </h1>
+            <p className="text-lg font-medium text-ink/90">{course.title}</p>
+            {course.description && (
+              <p className="mt-1 text-sm text-muted max-w-lg">
+                {course.description}
+              </p>
+            )}
           </div>
-        ))}
+
+          <div className="relative w-full max-w-[280px]">
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search lessons"
+              className="w-full rounded-pill border border-line bg-white/70 py-2.5 pl-5 pr-11 text-sm text-ink outline-none placeholder:text-muted focus:border-accent shadow-sm"
+            />
+            <button className="absolute right-1.5 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full bg-accent text-white">
+              <Search size={14} />
+            </button>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-8">
+          {/* Left: unit accordion */}
+          <div className="rounded-[24px] bg-white p-3 space-y-2">
+            {filteredUnits.length === 0 && (
+              <p className="p-6 text-sm text-muted text-center">
+                No lessons match &quot;{search}&quot;.
+              </p>
+            )}
+
+            {filteredUnits.map((unit, unitIdx) => {
+              const open = openUnitId === unit.id;
+              return (
+                <div
+                  key={unit.id}
+                  className="rounded-2xl border border-line/60 overflow-hidden"
+                >
+                  <button
+                    onClick={() => setOpenUnitId(open ? null : unit.id)}
+                    className="w-full flex items-center justify-between px-5 py-4 text-left hover:bg-ink/5 transition-colors"
+                  >
+                    <span className="text-sm font-semibold text-ink">
+                      Unit {unitIdx + 1}: {unit.title}
+                    </span>
+                    <div className="flex items-center gap-3">
+                      <span className="text-xs text-muted">
+                        {unit.lessons.length} lesson
+                        {unit.lessons.length !== 1 ? "s" : ""}
+                      </span>
+                      <ChevronDown
+                        size={16}
+                        className={`text-muted transition-transform ${
+                          open ? "rotate-180" : ""
+                        }`}
+                      />
+                    </div>
+                  </button>
+
+                  {open && (
+                    <ul className="border-t border-line/50 bg-white/60">
+                      {unit.lessons.map((lesson) => (
+                        <li key={lesson.id}>
+                          <button
+                            className="w-full flex items-center gap-3 px-5 py-3.5 text-left text-sm text-ink/80 hover:bg-ink/5 hover:text-ink transition-colors border-b border-line/30 last:border-b-0"
+                            onClick={() =>
+                              router.push(
+                                `/courses/${courseId}/${unit.id}/${lesson.id}`
+                              )
+                            }
+                          >
+                            <PlayCircle
+                              size={16}
+                              className="text-accent shrink-0"
+                            />
+                            {lesson.title}
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Right: continue learning panel */}
+          <div className="rounded-[24px] bg-white p-6 h-fit sticky top-8">
+            <h3 className="text-xs font-bold text-muted uppercase tracking-wider mb-4">
+              Continue learning
+            </h3>
+
+            {nextLesson && nextUnit ? (
+              <>
+                <div className="rounded-2xl bg-accent/10 p-4 mb-5">
+                  <p className="text-xs font-medium text-accent mb-1">
+                    Unit {1}: {nextUnit.title}
+                  </p>
+                  <p className="text-sm font-semibold text-ink">
+                    {nextLesson.title}
+                  </p>
+                </div>
+                <button
+                  onClick={() =>
+                    router.push(
+                      `/courses/${courseId}/${nextUnit.id}/${nextLesson.id}`
+                    )
+                  }
+                  className="w-full bg-ink text-white rounded-pill py-3 text-sm font-medium hover:bg-ink/80 transition-colors mb-6"
+                >
+                  Start lesson
+                </button>
+              </>
+            ) : (
+              <p className="text-sm text-muted mb-6">
+                No lessons available yet.
+              </p>
+            )}
+
+            <div className="space-y-2 text-sm">
+              <div className="flex items-center justify-between text-muted">
+                <span className="flex items-center gap-1.5">
+                  <CheckCircle2 size={14} /> Total lessons
+                </span>
+                <span className="text-ink font-medium">{totalLessons}</span>
+              </div>
+              <div className="flex items-center justify-between text-muted">
+                <span>Units</span>
+                <span className="text-ink font-medium">
+                  {course.units.length}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );

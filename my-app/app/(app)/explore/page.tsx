@@ -1,8 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, useRef } from "react";
-import Link from "next/link";
-import { Search, ArrowLeft } from "lucide-react";
+import { Search } from "lucide-react";
 import { supabase } from "@/lib/supabase/client";
 import CourseCard, { CourseCardData } from "@/components/CourseCard";
 import { motion, AnimatePresence } from "framer-motion";
@@ -16,9 +15,29 @@ const TABS: { key: Tab; label: string }[] = [
 ];
 
 const LEARNING_TOPICS = ["IELTS", "Finance", "English", "Spanish", "Data Analysis"];
+const SEARCH_HISTORY_KEY = "pace_recent_searches";
+
+function getRecentSearches(): string[] {
+  if (typeof window === "undefined") return [];
+  try {
+    return JSON.parse(localStorage.getItem(SEARCH_HISTORY_KEY) ?? "[]");
+  } catch {
+    return [];
+  }
+}
+
+function pushRecentSearch(term: string) {
+  if (typeof window === "undefined" || !term.trim()) return;
+  const existing = getRecentSearches().filter(
+    (t) => t.toLowerCase() !== term.toLowerCase()
+  );
+  const updated = [term, ...existing].slice(0, 3);
+  localStorage.setItem(SEARCH_HISTORY_KEY, JSON.stringify(updated));
+}
 
 export default function ExplorePage() {
   const [courses, setCourses] = useState<CourseCardData[]>([]);
+  const [recentCourseIds, setRecentCourseIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>("recent");
@@ -62,9 +81,14 @@ export default function ExplorePage() {
 
   useEffect(() => {
     let cancelled = false;
-    async function fetchCourses() {
+
+    async function fetchAll() {
       setLoading(true);
       setError(null);
+
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
 
       const { data, error } = await supabase
         .from("courses")
@@ -82,6 +106,41 @@ export default function ExplorePage() {
         setLoading(false);
         return;
       }
+
+      const { data: enrollmentRows } = await supabase
+        .from("enrollments")
+        .select("course_id");
+
+      const countByCourse: Record<string, number> = {};
+      (enrollmentRows ?? []).forEach((row: any) => {
+        countByCourse[row.course_id] = (countByCourse[row.course_id] ?? 0) + 1;
+      });
+
+      const counts = Object.values(countByCourse);
+      const averageEnrollment =
+        counts.length > 0 ? counts.reduce((a, b) => a + b, 0) / counts.length : 0;
+
+      let recentIds: string[] = [];
+      if (user) {
+        const sevenDaysAgo = new Date(
+          Date.now() - 7 * 24 * 60 * 60 * 1000
+        ).toISOString();
+        const { data: views } = await supabase
+          .from("course_views")
+          .select("course_id, viewed_at")
+          .eq("learner_id", user.id)
+          .gte("viewed_at", sevenDaysAgo)
+          .order("viewed_at", { ascending: false });
+
+        const seen = new Set<string>();
+        (views ?? []).forEach((v: any) => {
+          if (!seen.has(v.course_id)) {
+            seen.add(v.course_id);
+            recentIds.push(v.course_id);
+          }
+        });
+      }
+      if (!cancelled) setRecentCourseIds(recentIds);
 
       const mapped: CourseCardData[] = (data ?? []).map((row: any) => {
         const sortedUnits = (row.units ?? [])
@@ -108,6 +167,8 @@ export default function ExplorePage() {
         const overviewText =
           sortedUnits[0]?.lessons?.[0]?.content?.body ?? row.description ?? "";
 
+        const enrolledCount = countByCourse[row.id] ?? 0;
+
         return {
           id: row.id,
           title: row.title,
@@ -116,13 +177,18 @@ export default function ExplorePage() {
           lessonCount: allLessons.length,
           hoursToComplete: Math.round((totalMinutes / 60) * 10) / 10,
           units: sortedUnits,
+          enrolledCount,
+          isHot: enrolledCount > averageEnrollment && enrolledCount > 0,
         };
       });
 
-      setCourses(mapped);
-      setLoading(false);
+      if (!cancelled) {
+        setCourses(mapped);
+        setLoading(false);
+      }
     }
-    fetchCourses();
+
+    fetchAll();
     return () => {
       cancelled = true;
     };
@@ -139,11 +205,47 @@ export default function ExplorePage() {
     return () => observer.disconnect();
   }, []);
 
+  function handleSearchSubmit() {
+    pushRecentSearch(query);
+  }
+
   const visible = useMemo(() => {
-    return courses.filter((c) =>
+    let list = courses.filter((c) =>
       c.title.toLowerCase().includes(query.toLowerCase())
     );
-  }, [courses, query]);
+
+    if (tab === "trending") {
+      list = list
+        .filter((c) => c.isHot)
+        .slice()
+        .sort((a, b) => (b.enrolledCount ?? 0) - (a.enrolledCount ?? 0));
+    } else if (tab === "recent") {
+      const order = new Map(recentCourseIds.map((id, i) => [id, i]));
+      list = list
+        .filter((c) => order.has(String(c.id)))
+        .slice()
+        .sort(
+          (a, b) => (order.get(String(a.id)) ?? 0) - (order.get(String(b.id)) ?? 0)
+        );
+    } else if (tab === "recommend") {
+      const searches = getRecentSearches().map((s) => s.toLowerCase());
+      if (searches.length > 0) {
+        list = list
+          .filter((c) => {
+            const haystack = `${c.title} ${c.description ?? ""}`.toLowerCase();
+            return searches.some((s) => haystack.includes(s));
+          })
+          .slice()
+          .sort((a, b) => (b.enrolledCount ?? 0) - (a.enrolledCount ?? 0));
+      } else {
+        list = list
+          .slice()
+          .sort((a, b) => (b.enrolledCount ?? 0) - (a.enrolledCount ?? 0));
+      }
+    }
+
+    return list;
+  }, [courses, query, tab, recentCourseIds]);
 
   function renderSearchInput(size: "large" | "small") {
     return (
@@ -189,13 +291,7 @@ export default function ExplorePage() {
           isScrolled ? "border-b border-line/50 shadow-sm" : "border-b border-transparent"
         }`}
       >
-        <Link
-          href="/personal"
-          className="flex items-center gap-4 text-ink font-medium hover:text-accent transition-colors"
-        >
-          <ArrowLeft size={20} />
-          <span className="font-serif text-lg">Explore</span>
-        </Link>
+        <div />
 
         <div className="h-10 w-80 mr-4 md:mr-10 flex items-center justify-end">
           <AnimatePresence>
@@ -207,7 +303,13 @@ export default function ExplorePage() {
                 transition={{ type: "spring", stiffness: 350, damping: 25 }}
                 className="w-full"
               >
-                <form onSubmit={(e) => e.preventDefault()} className="relative w-full">
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    handleSearchSubmit();
+                  }}
+                  className="relative w-full"
+                >
                   {renderSearchInput("small")}
                 </form>
               </motion.div>
@@ -237,7 +339,13 @@ export default function ExplorePage() {
         </h1>
 
         <div ref={searchBarRef} className="w-full max-w-[760px]">
-          <form onSubmit={(e) => e.preventDefault()} className="relative w-full">
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              handleSearchSubmit();
+            }}
+            className="relative w-full"
+          >
             {renderSearchInput("large")}
           </form>
         </div>
@@ -249,16 +357,17 @@ export default function ExplorePage() {
             <button
               key={key}
               onClick={() => setTab(key)}
-              className={[
-                "relative pb-3 text-[15px] font-semibold transition-colors",
-                tab === key ? "text-accent" : "text-muted hover:text-ink",
-              ].join(" ")}
+              className="relative flex flex-col items-center pb-3 text-[15px] font-semibold transition-colors"
             >
-              {label}
+              <span
+                className={tab === key ? "text-ink" : "text-muted hover:text-ink"}
+              >
+                {label}
+              </span>
               {tab === key && (
                 <motion.span
                   layoutId="active-tab"
-                  className="absolute -bottom-[1px] left-0 right-0 h-[2px] bg-accent rounded-t-full"
+                  className="absolute -bottom-[1px] h-[2px] w-full bg-ink rounded-t-full"
                 />
               )}
             </button>
@@ -285,8 +394,17 @@ export default function ExplorePage() {
 
         {!loading && !error && visible.length === 0 && (
           <div className="rounded-[32px] border border-line bg-white/80 backdrop-blur-md p-14 text-center text-sm text-muted shadow-sm">
-            <p className="text-xl mb-3 text-ink font-medium">No courses found 🌱</p>
-            {query ? `We couldn't find anything for "${query}"` : "Check back soon for new courses."}
+            <p className="text-xl mb-3 text-ink font-medium">
+              {tab === "recent" && "No recent activity 🌱"}
+              {tab === "recommend" && "Nothing to recommend yet 🌱"}
+              {tab === "trending" && "Nothing trending yet 🌱"}
+            </p>
+            {tab === "recent" &&
+              "Courses you preview in the last 7 days will show up here."}
+            {tab === "recommend" &&
+              "Search for a topic, and we'll recommend related courses."}
+            {tab === "trending" &&
+              "Trending courses appear once enrollment picks up."}
           </div>
         )}
 
