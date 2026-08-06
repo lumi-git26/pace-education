@@ -29,10 +29,26 @@ export default function CoursesPage() {
       setLoading(true);
       setError(null);
 
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!user) {
+        if (!cancelled) {
+          setCourses([]);
+          setLoading(false);
+        }
+        return;
+      }
+
+      // Only courses the learner has actually enrolled in.
       const { data, error } = await supabase
-        .from("courses")
-        .select("id, title, status")
-        .order("created_at", { ascending: false });
+        .from("enrollments")
+        .select(
+          "status, progress_pct, courses(id, title, status)"
+        )
+        .eq("learner_id", user.id)
+        .order("enrolled_at", { ascending: false });
 
       if (cancelled) return;
 
@@ -40,11 +56,15 @@ export default function CoursesPage() {
         setError(error.message);
         setCourses([]);
       } else {
-        const mappedData = (data ?? []).map((c) => ({
-          ...c,
-          progress: Math.floor(Math.random() * 80) + 10,
-        }));
-        setCourses(mappedData);
+        const mapped: CourseRow[] = (data ?? [])
+          .filter((row: any) => row.courses)
+          .map((row: any) => ({
+            id: row.courses.id,
+            title: row.courses.title,
+            status: row.status, // enrollment status: active | completed | archived
+            progress: Math.round(row.progress_pct ?? 0),
+          }));
+        setCourses(mapped);
       }
       setLoading(false);
     }

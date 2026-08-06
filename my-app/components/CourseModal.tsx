@@ -3,8 +3,9 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Lock, PlayCircle, Clock, BookOpen } from "lucide-react";
+import { X, Lock, PlayCircle, Clock, BookOpen, Check } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { supabase } from "@/lib/supabase/client";
 import { CourseCardData } from "./CourseCard";
 
 const UNIT_PREVIEW_LIMIT = 5;
@@ -13,13 +14,19 @@ const LESSON_PREVIEW_LIMIT = 3;
 export default function CourseModal({
   course,
   onClose,
+  onEnrolled,
 }: {
   course: CourseCardData;
   onClose: () => void;
+  onEnrolled?: () => void;
 }) {
   const router = useRouter();
   const [mounted, setMounted] = useState(false);
   const [isTitleScrolled, setIsTitleScrolled] = useState(false);
+  const [enrolling, setEnrolling] = useState(false);
+  const [enrollError, setEnrollError] = useState<string | null>(null);
+  const [isEnrolled, setIsEnrolled] = useState(false);
+  const [checkingEnrollment, setCheckingEnrollment] = useState(true);
 
   useEffect(() => {
     setMounted(true);
@@ -30,6 +37,39 @@ export default function CourseModal({
     };
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    async function checkEnrollment() {
+      setCheckingEnrollment(true);
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!user) {
+        setCheckingEnrollment(false);
+        return;
+      }
+
+      const { data } = await supabase
+        .from("enrollments")
+        .select("id")
+        .eq("course_id", course.id)
+        .eq("learner_id", user.id)
+        .maybeSingle();
+
+      if (!cancelled) {
+        setIsEnrolled(!!data);
+        setCheckingEnrollment(false);
+      }
+    }
+
+    checkEnrollment();
+    return () => {
+      cancelled = true;
+    };
+  }, [course.id]);
+
   const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
     const scrollTop = e.currentTarget.scrollTop;
     setIsTitleScrolled(scrollTop > 120);
@@ -39,7 +79,43 @@ export default function CourseModal({
   const visibleUnits = units.slice(0, UNIT_PREVIEW_LIMIT);
   const lockedUnitCount = Math.max(0, units.length - UNIT_PREVIEW_LIMIT);
 
-  function handleEnroll() {
+  async function handleEnroll() {
+    if (isEnrolled) {
+      router.push(`/courses/${course.id}`);
+      return;
+    }
+
+    setEnrolling(true);
+    setEnrollError(null);
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      setEnrollError("You need to be signed in to enroll.");
+      setEnrolling(false);
+      return;
+    }
+
+    const { error } = await supabase.from("enrollments").upsert(
+      {
+        course_id: course.id,
+        learner_id: user.id,
+        status: "active",
+      },
+      { onConflict: "course_id,learner_id" }
+    );
+
+    setEnrolling(false);
+
+    if (error) {
+      setEnrollError(error.message);
+      return;
+    }
+
+    setIsEnrolled(true);
+    onEnrolled?.();
     router.push(`/courses/${course.id}`);
   }
 
@@ -128,11 +204,30 @@ export default function CourseModal({
 
             <div className="relative px-8 md:px-12 pb-8 md:pb-12 shrink-0 bg-paper">
               <div className="absolute bottom-full left-0 right-0 h-12 bg-gradient-to-t from-paper to-transparent pointer-events-none" />
+              {enrollError && (
+                <p className="mb-3 text-sm text-red-600 relative z-10">
+                  {enrollError}
+                </p>
+              )}
               <button
                 onClick={handleEnroll}
-                className="w-full bg-ink text-white rounded-pill py-4 text-[15px] font-medium hover:bg-ink/80 transition-transform hover:scale-[1.02] cursor-pointer shadow-xl relative z-10"
+                disabled={enrolling || checkingEnrollment}
+                className={[
+                  "w-full rounded-pill py-4 text-[15px] font-medium transition-transform relative z-10 shadow-xl",
+                  isEnrolled
+                    ? "bg-green-600 text-white hover:scale-[1.02] cursor-pointer"
+                    : "bg-ink text-white hover:bg-ink/80 hover:scale-[1.02] cursor-pointer",
+                  (enrolling || checkingEnrollment) &&
+                    "opacity-60 cursor-not-allowed hover:scale-100",
+                ].join(" ")}
               >
-                Enroll
+                {checkingEnrollment
+                  ? "Checking…"
+                  : enrolling
+                  ? "Enrolling…"
+                  : isEnrolled
+                  ? "✓ Enrolled — Go to course"
+                  : "Enroll"}
               </button>
             </div>
           </div>

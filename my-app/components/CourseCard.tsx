@@ -1,8 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { ArrowUpRight, PlayCircle, Link, Mail, Flame } from "lucide-react";
+import { ArrowUpRight, PlayCircle, Link, Mail, Flame, Check } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { supabase } from "@/lib/supabase/client";
 import CourseModal from "./CourseModal";
 
 export interface UnitPreview {
@@ -24,15 +26,51 @@ export interface CourseCardData {
 export default function CourseCard({ course }: { course: CourseCardData }) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isEnrolled, setIsEnrolled] = useState(false);
+  const router = useRouter();
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function checkEnrollment() {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!user) return;
+
+      const { data } = await supabase
+        .from("enrollments")
+        .select("id")
+        .eq("course_id", course.id)
+        .eq("learner_id", user.id)
+        .maybeSingle();
+
+      if (!cancelled) setIsEnrolled(!!data);
+    }
+
+    checkEnrollment();
+    return () => {
+      cancelled = true;
+    };
+  }, [course.id]);
 
   const previewUnits = (course.units ?? []).slice(0, 3);
+
+  function handleCardClick() {
+    if (isEnrolled) {
+      router.push(`/courses/${course.id}`);
+    } else {
+      setIsModalOpen(true);
+    }
+  }
 
   return (
     <>
       <motion.div
         layout
         className="relative rounded-[32px] bg-white/40 backdrop-blur-2xl border border-white/60 shadow-sm hover:shadow-md transition-shadow overflow-hidden group p-6 cursor-pointer"
-        onClick={() => setIsModalOpen(true)}
+        onClick={handleCardClick}
       >
         <button
           onClick={(e) => {
@@ -73,9 +111,15 @@ export default function CourseCard({ course }: { course: CourseCardData }) {
             </span>
           </div>
 
-          <div className="flex items-center gap-1 text-xs font-bold text-orange-500 bg-orange-500/10 px-3 py-1.5 rounded-full">
-            <Flame size={14} /> Hot
-          </div>
+          {isEnrolled ? (
+            <div className="flex items-center gap-1 text-xs font-bold text-green-600 bg-green-600/10 px-3 py-1.5 rounded-full">
+              <Check size={14} /> Enrolled
+            </div>
+          ) : (
+            <div className="flex items-center gap-1 text-xs font-bold text-orange-500 bg-orange-500/10 px-3 py-1.5 rounded-full">
+              <Flame size={14} /> Hot
+            </div>
+          )}
         </div>
 
         <AnimatePresence>
@@ -111,11 +155,21 @@ export default function CourseCard({ course }: { course: CourseCardData }) {
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
-                    setIsModalOpen(true);
+                    if (isEnrolled) {
+                      router.push(`/courses/${course.id}`);
+                    } else {
+                      setIsModalOpen(true);
+                    }
                   }}
-                  className="w-full mt-2 bg-ink text-white rounded-pill py-3 text-sm font-medium hover:bg-ink/80 transition-colors"
+                  disabled={isEnrolled}
+                  className={[
+                    "w-full mt-2 rounded-pill py-3 text-sm font-medium transition-colors",
+                    isEnrolled
+                      ? "bg-line text-muted cursor-not-allowed"
+                      : "bg-ink text-white hover:bg-ink/80 cursor-pointer",
+                  ].join(" ")}
                 >
-                  Enroll
+                  {isEnrolled ? "Enrolled" : "Enroll"}
                 </button>
               </div>
             </motion.div>
@@ -124,7 +178,11 @@ export default function CourseCard({ course }: { course: CourseCardData }) {
       </motion.div>
 
       {isModalOpen && (
-        <CourseModal course={course} onClose={() => setIsModalOpen(false)} />
+        <CourseModal
+          course={course}
+          onClose={() => setIsModalOpen(false)}
+          onEnrolled={() => setIsEnrolled(true)}
+        />
       )}
     </>
   );
