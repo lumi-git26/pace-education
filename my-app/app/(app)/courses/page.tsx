@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase/client";
 import { useProfile } from "@/lib/supabase/useProfile";
 import { Search as SearchIcon, PlayCircle } from "lucide-react";
@@ -16,6 +17,7 @@ type CourseRow = {
 
 export default function CoursesPage() {
   const { profile } = useProfile();
+  const router = useRouter();
   const [tab, setTab] = useState<Tab>("active");
   const [courses, setCourses] = useState<CourseRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -41,12 +43,9 @@ export default function CoursesPage() {
         return;
       }
 
-      // Only courses the learner has actually enrolled in.
       const { data, error } = await supabase
         .from("enrollments")
-        .select(
-          "status, progress_pct, courses(id, title, status)"
-        )
+        .select("status, progress_pct, courses(id, title, status)")
         .eq("learner_id", user.id)
         .order("enrolled_at", { ascending: false });
 
@@ -61,7 +60,7 @@ export default function CoursesPage() {
           .map((row: any) => ({
             id: row.courses.id,
             title: row.courses.title,
-            status: row.status, // enrollment status: active | completed | archived
+            status: row.status,
             progress: Math.round(row.progress_pct ?? 0),
           }));
         setCourses(mapped);
@@ -89,7 +88,6 @@ export default function CoursesPage() {
   return (
     <div className="min-h-screen w-full">
       <div className="w-full px-8 py-16 lg:px-16">
-        {/* HEADER */}
         <div className="flex flex-wrap items-center justify-between gap-6 mb-12">
           <h1 className="font-serif text-[38px] font-semibold text-ink">
             Hi, {firstName}
@@ -108,7 +106,6 @@ export default function CoursesPage() {
           </div>
         </div>
 
-        {/* TABS */}
         <div className="flex items-center gap-10 border-b border-line/80 pb-3 mb-8">
           <button
             onClick={() => setTab("active")}
@@ -136,7 +133,6 @@ export default function CoursesPage() {
           </button>
         </div>
 
-        {/* COURSE GRID + EMPTY/ERROR STATES */}
         <div className="pb-12">
           {loading && (
             <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
@@ -175,6 +171,7 @@ export default function CoursesPage() {
               {visible.map((course) => (
                 <div
                   key={course.id}
+                  onClick={() => router.push(`/courses/${course.id}`)}
                   className="group relative flex flex-col justify-between h-56 rounded-[32px] border border-white/60 bg-white/40 backdrop-blur-2xl p-6 shadow-sm hover:shadow-md transition-all cursor-pointer"
                 >
                   <div>

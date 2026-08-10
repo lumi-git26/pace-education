@@ -11,16 +11,30 @@ import {
   Search,
   ChevronDown,
   CheckCircle2,
+  FileCheck,
 } from "lucide-react";
 import Link from "next/link";
 
 type Lesson = { id: string; title: string; order_index: number };
-type Unit = { id: string; title: string; order_index: number; lessons: Lesson[] };
+type Unit = {
+  id: string;
+  title: string;
+  order_index: number;
+  phase_id: string | null;
+  lessons: Lesson[];
+};
+type Phase = {
+  id: string;
+  title: string;
+  order_index: number;
+  passing_score: number;
+};
 type CourseDetail = {
   id: string;
   title: string;
   description: string | null;
   units: Unit[];
+  phases: Phase[];
 };
 
 export default function CourseDetailPage() {
@@ -30,11 +44,20 @@ export default function CourseDetailPage() {
   const courseId = params.courseId as string;
 
   const [course, setCourse] = useState<CourseDetail | null>(null);
+  const [completedLessonIds, setCompletedLessonIds] = useState<Set<string>>(
+    new Set()
+  );
+  const [passedPhaseIds, setPassedPhaseIds] = useState<Set<string>>(new Set());
   const [isEnrolled, setIsEnrolled] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [openUnitId, setOpenUnitId] = useState<string | null>(null);
+  const [openUnitId, setOpenUnitIdState] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+
+  function setOpenUnitId(id: string | null) {
+    setOpenUnitIdState(id);
+    if (id) localStorage.setItem(`pace_last_unit_${courseId}`, id);
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -72,7 +95,7 @@ export default function CourseDetailPage() {
       const { data, error } = await supabase
         .from("courses")
         .select(
-          "id, title, description, units(id, title, order_index, lessons(id, title, order_index))"
+          "id, title, description, units(id, title, order_index, phase_id, lessons(id, title, order_index)), phases(id, title, order_index, passing_score)"
         )
         .eq("id", courseId)
         .single();
@@ -95,14 +118,48 @@ export default function CourseDetailPage() {
             .sort((a: any, b: any) => a.order_index - b.order_index),
         }));
 
-      setCourse({
-        id: data.id,
-        title: data.title,
-        description: data.description,
-        units: sortedUnits,
-      });
-      setOpenUnitId(sortedUnits[0]?.id ?? null);
-      setLoading(false);
+      const sortedPhases = (data.phases ?? [])
+        .slice()
+        .sort((a: any, b: any) => a.order_index - b.order_index);
+
+      const { data: completions } = await supabase
+        .from("lesson_completions")
+        .select("lesson_id")
+        .eq("learner_id", user.id);
+
+      const { data: passedSubmissions } = await supabase
+        .from("submissions")
+        .select("phase_id")
+        .eq("learner_id", user.id)
+        .eq("course_id", courseId)
+        .eq("submission_type", "unit_final")
+        .eq("passed", true);
+
+      if (!cancelled) {
+        setCompletedLessonIds(
+          new Set((completions ?? []).map((c: any) => c.lesson_id))
+        );
+        setPassedPhaseIds(
+          new Set((passedSubmissions ?? []).map((s: any) => s.phase_id))
+        );
+
+        const savedUnitId = localStorage.getItem(`pace_last_unit_${courseId}`);
+        const validSavedUnit = sortedUnits.find(
+          (u: any) => u.id === savedUnitId
+        );
+
+        setCourse({
+          id: data.id,
+          title: data.title,
+          description: data.description,
+          units: sortedUnits,
+          phases: sortedPhases,
+        });
+        setOpenUnitIdState(
+          validSavedUnit ? savedUnitId : sortedUnits[0]?.id ?? null
+        );
+        setLoading(false);
+      }
     }
 
     load();
@@ -113,14 +170,23 @@ export default function CourseDetailPage() {
 
   const firstName = profile?.full_name?.split(" ")[0] ?? "there";
 
-  // First lesson of the first unit — placeholder "next up" logic until
-  // real lesson-completion tracking exists.
-  const nextLesson =
-    course?.units?.[0]?.lessons?.[0] ?? null;
-  const nextUnit = course?.units?.[0] ?? null;
+  let nextLesson: Lesson | null = null;
+  let nextUnit: Unit | null = null;
+  if (course) {
+    outer: for (const unit of course.units) {
+      for (const lesson of unit.lessons) {
+        if (!completedLessonIds.has(lesson.id)) {
+          nextLesson = lesson;
+          nextUnit = unit;
+          break outer;
+        }
+      }
+    }
+  }
 
   const totalLessons =
     course?.units.reduce((sum, u) => sum + u.lessons.length, 0) ?? 0;
+  const completedCount = completedLessonIds.size;
 
   if (loading) {
     return (
@@ -175,6 +241,14 @@ export default function CourseDetailPage() {
         unit.lessons.length > 0
     );
 
+  const unitsByPhase: Record<string, Unit[]> = {};
+  filteredUnits.forEach((u) => {
+    if (u.phase_id) {
+      unitsByPhase[u.phase_id] = unitsByPhase[u.phase_id] ?? [];
+      unitsByPhase[u.phase_id].push(u);
+    }
+  });
+
   return (
     <div className="min-h-screen w-full px-8 py-10 lg:px-16">
       <Link
@@ -185,15 +259,16 @@ export default function CourseDetailPage() {
       </Link>
 
       <div className="rounded-[32px] bg-white/50 backdrop-blur-xl border border-white/60 shadow-sm p-8 md:p-10">
-        {/* Header */}
         <div className="flex flex-wrap items-start justify-between gap-6 mb-8">
           <div>
             <h1 className="font-serif text-3xl font-semibold text-ink mb-2">
               Welcome, {firstName}
             </h1>
-            <p className="text-lg font-medium text-ink/90">{course.title}</p>
+            <p className="font-serif text-2xl font-bold text-accent mb-1">
+              {course.title}
+            </p>
             {course.description && (
-              <p className="mt-1 text-sm text-muted max-w-lg">
+              <p className="text-sm text-muted max-w-lg">
                 {course.description}
               </p>
             )}
@@ -213,70 +288,138 @@ export default function CourseDetailPage() {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-8">
-          {/* Left: unit accordion */}
-          <div className="rounded-[24px] bg-white p-3 space-y-2">
-            {filteredUnits.length === 0 && (
-              <p className="p-6 text-sm text-muted text-center">
-                No lessons match &quot;{search}&quot;.
-              </p>
-            )}
+          <div className="rounded-[24px] bg-white p-3 space-y-4">
+            {course.phases.map((phase, phaseIdx) => {
+              const phaseUnits = unitsByPhase[phase.id] ?? [];
+              if (phaseUnits.length === 0) return null;
 
-            {filteredUnits.map((unit, unitIdx) => {
-              const open = openUnitId === unit.id;
+              const previousPhase = course.phases[phaseIdx - 1];
+              const phaseLocked =
+                phaseIdx > 0 &&
+                previousPhase &&
+                !passedPhaseIds.has(previousPhase.id);
+              const phasePassed = passedPhaseIds.has(phase.id);
+
               return (
-                <div
-                  key={unit.id}
-                  className="rounded-2xl border border-line/60 overflow-hidden"
-                >
-                  <button
-                    onClick={() => setOpenUnitId(open ? null : unit.id)}
-                    className="w-full flex items-center justify-between px-5 py-4 text-left hover:bg-ink/5 transition-colors"
-                  >
-                    <span className="text-sm font-semibold text-ink">
-                      Unit {unitIdx + 1}: {unit.title}
-                    </span>
-                    <div className="flex items-center gap-3">
-                      <span className="text-xs text-muted">
-                        {unit.lessons.length} lesson
-                        {unit.lessons.length !== 1 ? "s" : ""}
-                      </span>
-                      <ChevronDown
-                        size={16}
-                        className={`text-muted transition-transform ${
-                          open ? "rotate-180" : ""
-                        }`}
-                      />
-                    </div>
-                  </button>
+                <div key={phase.id} className="space-y-2">
+                  <p className="text-xs font-bold text-muted uppercase tracking-wider px-2">
+                    {phase.title}
+                  </p>
 
-                  {open && (
-                    <ul className="border-t border-line/50 bg-white/60">
-                      {unit.lessons.map((lesson) => (
-                        <li key={lesson.id}>
-                          <button
-                            className="w-full flex items-center gap-3 px-5 py-3.5 text-left text-sm text-ink/80 hover:bg-ink/5 hover:text-ink transition-colors border-b border-line/30 last:border-b-0"
-                            onClick={() =>
-                              router.push(
-                                `/courses/${courseId}/${unit.id}/${lesson.id}`
-                              )
-                            }
+                  {phaseLocked ? (
+                    <div className="flex items-center gap-3 rounded-2xl px-5 py-6 border border-line/50 bg-line/10 opacity-70">
+                      <Lock size={18} className="text-muted" />
+                      <p className="text-sm text-muted">
+                        Pass &quot;{previousPhase.title}&quot; to unlock this
+                        phase.
+                      </p>
+                    </div>
+                  ) : (
+                    <>
+                      {phaseUnits.map((unit) => {
+                        const unitIdx =
+                          course.units.findIndex((u) => u.id === unit.id) + 1;
+                        const open = openUnitId === unit.id;
+                        return (
+                          <div
+                            key={unit.id}
+                            className="rounded-2xl border border-line/60 overflow-hidden"
                           >
-                            <PlayCircle
-                              size={16}
-                              className="text-accent shrink-0"
-                            />
-                            {lesson.title}
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
+                            <button
+                              onClick={() =>
+                                setOpenUnitId(open ? null : unit.id)
+                              }
+                              className="w-full flex items-center justify-between px-5 py-4 text-left hover:bg-ink/5 transition-colors"
+                            >
+                              <span className="text-sm font-semibold text-ink">
+                                Unit {unitIdx}: {unit.title}
+                              </span>
+                              <div className="flex items-center gap-3">
+                                <span className="text-xs text-muted">
+                                  {unit.lessons.length} lesson
+                                  {unit.lessons.length !== 1 ? "s" : ""}
+                                </span>
+                                <ChevronDown
+                                  size={16}
+                                  className={`text-muted transition-transform ${
+                                    open ? "rotate-180" : ""
+                                  }`}
+                                />
+                              </div>
+                            </button>
+
+                            {open && (
+                              <ul className="border-t border-line/50 bg-white/60">
+                                {unit.lessons.map((lesson) => {
+                                  const done = completedLessonIds.has(
+                                    lesson.id
+                                  );
+                                  return (
+                                    <li key={lesson.id}>
+                                      <button
+                                        className="w-full flex items-center gap-3 px-5 py-3.5 text-left text-sm text-ink/80 hover:bg-ink/5 hover:text-ink transition-colors border-b border-line/30 last:border-b-0"
+                                        onClick={() =>
+                                          router.push(
+                                            `/courses/${courseId}/${unit.id}/${lesson.id}`
+                                          )
+                                        }
+                                      >
+                                        {done ? (
+                                          <CheckCircle2
+                                            size={16}
+                                            className="text-green-600 shrink-0"
+                                          />
+                                        ) : (
+                                          <PlayCircle
+                                            size={16}
+                                            className="text-accent shrink-0"
+                                          />
+                                        )}
+                                        {lesson.title}
+                                      </button>
+                                    </li>
+                                  );
+                                })}
+                              </ul>
+                            )}
+                          </div>
+                        );
+                      })}
+
+                      <button
+                        onClick={() =>
+                          router.push(`/courses/${courseId}/phase/${phase.id}`)
+                        }
+                        className={[
+                          "w-full flex items-center gap-3 rounded-2xl px-5 py-4 border text-left transition-colors",
+                          phasePassed
+                            ? "border-green-300 bg-green-50 hover:bg-green-100"
+                            : "border-accent/40 bg-accent/10 hover:bg-accent/15",
+                        ].join(" ")}
+                      >
+                        {phasePassed ? (
+                          <CheckCircle2 size={18} className="text-green-600" />
+                        ) : (
+                          <FileCheck size={18} className="text-accent" />
+                        )}
+                        <div className="flex-1">
+                          <p className="text-sm font-semibold text-ink">
+                            {phase.title} — Final Test
+                          </p>
+                          <p className="text-xs text-muted">
+                            {phasePassed
+                              ? "Passed — retake anytime"
+                              : `Take anytime — score ${phase.passing_score}%+ to skip ahead`}
+                          </p>
+                        </div>
+                      </button>
+                    </>
                   )}
                 </div>
               );
             })}
           </div>
 
-          {/* Right: continue learning panel */}
           <div className="rounded-[24px] bg-white p-6 h-fit sticky top-8">
             <h3 className="text-xs font-bold text-muted uppercase tracking-wider mb-4">
               Continue learning
@@ -286,7 +429,7 @@ export default function CourseDetailPage() {
               <>
                 <div className="rounded-2xl bg-accent/10 p-4 mb-5">
                   <p className="text-xs font-medium text-accent mb-1">
-                    Unit {1}: {nextUnit.title}
+                    {nextUnit.title}
                   </p>
                   <p className="text-sm font-semibold text-ink">
                     {nextLesson.title}
@@ -295,32 +438,41 @@ export default function CourseDetailPage() {
                 <button
                   onClick={() =>
                     router.push(
-                      `/courses/${courseId}/${nextUnit.id}/${nextLesson.id}`
+                      `/courses/${courseId}/${nextUnit!.id}/${nextLesson!.id}`
                     )
                   }
                   className="w-full bg-ink text-white rounded-pill py-3 text-sm font-medium hover:bg-ink/80 transition-colors mb-6"
                 >
-                  Start lesson
+                  {completedCount > 0 ? "Continue" : "Start lesson"}
                 </button>
               </>
             ) : (
-              <p className="text-sm text-muted mb-6">
-                No lessons available yet.
-              </p>
+              <div className="rounded-2xl bg-green-50 p-4 mb-6 text-center">
+                <CheckCircle2 size={24} className="text-green-600 mx-auto mb-2" />
+                <p className="text-sm font-semibold text-ink">
+                  All lessons complete!
+                </p>
+              </div>
             )}
 
             <div className="space-y-2 text-sm">
               <div className="flex items-center justify-between text-muted">
-                <span className="flex items-center gap-1.5">
-                  <CheckCircle2 size={14} /> Total lessons
-                </span>
-                <span className="text-ink font-medium">{totalLessons}</span>
-              </div>
-              <div className="flex items-center justify-between text-muted">
-                <span>Units</span>
+                <span>Progress</span>
                 <span className="text-ink font-medium">
-                  {course.units.length}
+                  {completedCount}/{totalLessons}
                 </span>
+              </div>
+              <div className="w-full bg-line/60 rounded-full h-1.5 overflow-hidden">
+                <div
+                  className="bg-accent h-1.5 rounded-full transition-all duration-500"
+                  style={{
+                    width: `${
+                      totalLessons > 0
+                        ? (completedCount / totalLessons) * 100
+                        : 0
+                    }%`,
+                  }}
+                />
               </div>
             </div>
           </div>
