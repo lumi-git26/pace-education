@@ -30,6 +30,10 @@ type NextLesson = {
 };
 type Goal = { title: string; daysLeft: number };
 type HeatmapDay = { date: Date; level: 0 | 1 | 2 | 3; hours: number };
+
+// Thêm Type mới cho dữ liệu của Biểu đồ Tuần (Có Label Thứ trong tuần)
+type WeekBarData = { dayLabel: string; hours: number; fullDate: string };
+
 type ClassroomInfo = {
   id: string;
   title: string;
@@ -88,16 +92,20 @@ export default function PersonalPage() {
   const [passedCount, setPassedCount] = useState(0);
   const [streak, setStreak] = useState(0);
   const [goal, setGoal] = useState<Goal | null>(null);
-  const [totalHours, setTotalHours] = useState(0);
+  
   const [avgGrade, setAvgGrade] = useState<number | null>(null);
   const [heatmap, setHeatmap] = useState<HeatmapDay[]>([]);
-  const [weekBars, setWeekBars] = useState<number[]>([0, 0, 0, 0, 0, 0, 0]);
+  
+  // State mới cho biểu đồ tuần
+  const [weekBars, setWeekBars] = useState<WeekBarData[]>([]);
+  
   const [classroom, setClassroom] = useState<ClassroomInfo | null>(null);
 
   const [loading, setLoading] = useState(true);
   const [isMounted, setIsMounted] = useState(false);
   const [isGoalVisible, setIsGoalVisible] = useState(false);
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
+  const [activeDays, setActiveDays] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     setIsMounted(true);
@@ -211,26 +219,23 @@ export default function PersonalPage() {
         setGoal({ title: goalRow.title, daysLeft });
       }
 
-      // --- Insights ---
+      // --- Insights (Heatmap & Weekly Chart) ---
       const twentyEightDaysAgo = new Date();
       twentyEightDaysAgo.setDate(twentyEightDaysAgo.getDate() - 27);
       twentyEightDaysAgo.setHours(0, 0, 0, 0);
 
       const { data: recentSubmissions } = await supabase
         .from("submissions")
-        .select("submitted_at, time_spent_secs, score")
+        .select("submitted_at, time_spent_secs, score, submission_type")
         .eq("learner_id", user.id)
         .gte("submitted_at", twentyEightDaysAgo.toISOString());
 
       if (!cancelled) {
         const rows = recentSubmissions ?? [];
-        const totalSeconds = rows.reduce(
-          (sum: number, r: any) => sum + (r.time_spent_secs ?? 0),
-          0
-        );
-        setTotalHours(Math.round((totalSeconds / 3600) * 10) / 10);
 
-        const scored = rows.filter((r: any) => r.score != null);
+        const scored = rows.filter(
+          (r: any) => r.score != null && r.submission_type === "unit_final"
+        );
         setAvgGrade(
           scored.length > 0
             ? Math.round(
@@ -241,6 +246,7 @@ export default function PersonalPage() {
             : null
         );
 
+        // Gom tổng giây học theo từng ngày
         const secondsByDay: Record<string, number> = {};
         rows.forEach((r: any) => {
           const key = new Date(r.submitted_at).toDateString();
@@ -248,6 +254,7 @@ export default function PersonalPage() {
             (secondsByDay[key] ?? 0) + (r.time_spent_secs ?? 0);
         });
 
+        // 1. Build Heatmap (28 ngày qua)
         const days: HeatmapDay[] = [];
         for (let i = 0; i < 28; i++) {
           const d = new Date();
@@ -257,10 +264,41 @@ export default function PersonalPage() {
           days.push({ date: d, level: levelFromSeconds(secs), hours: secs / 3600 });
         }
         setHeatmap(days);
-        setWeekBars(days.slice(-7).map((d) => Math.round(d.hours * 10) / 10));
+
+        // 2. Build Chart Tuần (Tính chính xác từ Thứ Hai -> Chủ Nhật của tuần hiện tại)
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const dayOfWeek = today.getDay(); // 0 là CN, 1 là T2...
+        const daysSinceMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1; // Khoảng cách về T2
+        
+        const currentMonday = new Date(today);
+        currentMonday.setDate(today.getDate() - daysSinceMonday);
+
+        const dayLabels = ["M", "T", "W", "T", "F", "S", "S"];
+        const thisWeekBars: WeekBarData[] = [];
+
+        for (let i = 0; i < 7; i++) {
+          const d = new Date(currentMonday);
+          d.setDate(currentMonday.getDate() + i);
+          const key = d.toDateString();
+          const secs = secondsByDay[key] ?? 0;
+          thisWeekBars.push({
+            dayLabel: dayLabels[i],
+            hours: Math.round((secs / 3600) * 10) / 10,
+            fullDate: key
+          });
+        }
+        setWeekBars(thisWeekBars);
+
+        // Bật chấm đỏ cho ngày có dữ liệu học
+        setActiveDays(
+          new Set(
+            Object.keys(secondsByDay).filter((key) => secondsByDay[key] > 0)
+          )
+        );
       }
 
-      // --- Classroom: first active membership, teacher name, latest post ---
+      // --- Classroom ---
       const { data: membership } = await supabase
         .from("classroom_members")
         .select(
@@ -313,7 +351,10 @@ export default function PersonalPage() {
   }, [goal]);
 
   const scheduleDays = getNext7Days();
-  const maxWeekHour = Math.max(1, ...weekBars);
+  
+  // Tính tổng giờ tuần và mốc cao nhất để vẽ biểu đồ khách quan
+  const currentWeekTotal = weekBars.reduce((sum, b) => sum + b.hours, 0).toFixed(1);
+  const maxWeekHour = Math.max(1, ...weekBars.map((b) => b.hours));
 
   return (
     <div className="relative min-h-screen w-full px-8 py-12 lg:px-16 overflow-y-auto overflow-x-hidden">
@@ -372,7 +413,7 @@ export default function PersonalPage() {
         {/* ============ LEFT COLUMN ============ */}
         <div className="space-y-6">
           
-          {/* --- 1. ACTIVE CLASSROOM (ĐẨY LÊN TOP NẾU CÓ) --- */}
+          {/* --- 1. ACTIVE CLASSROOM --- */}
           {loading ? (
             <div className="rounded-[20px] bg-white/60 backdrop-blur-xl border border-white/60 shadow-sm p-6">
               <div className="h-32 animate-pulse rounded-xl bg-line/40" />
@@ -579,7 +620,7 @@ export default function PersonalPage() {
             )}
           </div>
 
-          {/* --- 4. EMPTY CLASSROOM (ĐẨY XUỐNG BOTTOM NẾU KHÔNG CÓ LỚP) --- */}
+          {/* --- 4. EMPTY CLASSROOM (ĐẨY XUỐNG BOTTOM) --- */}
           {!loading && !classroom && (
             <div className="rounded-[20px] bg-white/60 backdrop-blur-xl border border-white/60 shadow-sm p-6">
               <h3 className="flex items-center gap-2 text-[11px] font-bold text-muted uppercase tracking-wider mb-5">
@@ -615,39 +656,40 @@ export default function PersonalPage() {
             </div>
 
             <div className="grid grid-cols-7 gap-1.5 mb-6">
-              {isMounted
-                ? scheduleDays.map((d) => {
-                    const isSelected =
-                      selectedDate &&
-                      d.toDateString() === selectedDate.toDateString();
-                    return (
-                      <button
-                        key={d.toISOString()}
-                        onClick={() => setSelectedDate(d)}
-                        className={[
-                          "relative flex flex-col items-center gap-1 rounded-xl py-2.5 text-center transition-colors duration-200 cursor-pointer",
-                          isSelected
-                            ? "bg-ink text-white shadow-sm"
-                            : "text-ink/70 hover:bg-white/60",
-                        ].join(" ")}
-                      >
-                        <span className="text-[10px] uppercase font-semibold opacity-70">
-                          {d
-                            .toLocaleDateString("en-US", { weekday: "short" })
-                            .charAt(0)}
-                        </span>
-                        <span className="text-[14px] font-bold">
-                          {d.getDate()}
-                        </span>
-                      </button>
-                    );
-                  })
-                : Array.from({ length: 7 }).map((_, i) => (
-                    <div
-                      key={i}
-                      className="rounded-xl h-[52px] bg-line/20 animate-pulse"
-                    />
-                  ))}
+            {isMounted
+              ? scheduleDays.map((d) => {
+                  const isSelected =
+                    selectedDate && d.toDateString() === selectedDate.toDateString();
+                  const hasActivity = activeDays.has(d.toDateString());
+                  return (
+                    <button
+                      key={d.toISOString()}
+                      onClick={() => setSelectedDate(d)}
+                      className={[
+                        "relative flex flex-col items-center gap-1 rounded-xl pt-2 pb-3.5 text-center transition-colors duration-200 cursor-pointer",
+                        isSelected
+                          ? "bg-ink text-white shadow-sm"
+                          : "text-ink/70 hover:bg-white/60",
+                      ].join(" ")}
+                    >
+                      <span className="text-[10px] uppercase font-semibold opacity-70">
+                        {d.toLocaleDateString("en-US", { weekday: "short" }).charAt(0)}
+                      </span>
+                      <span className="text-[14px] font-bold">{d.getDate()}</span>
+                      {hasActivity && (
+                        <span
+                          className={[
+                            "absolute bottom-1 w-1.5 h-1.5 rounded-full",
+                            isSelected ? "bg-white" : "bg-red-500",
+                          ].join(" ")}
+                        />
+                      )}
+                    </button>
+                  );
+                })
+              : Array.from({ length: 7 }).map((_, i) => (
+                  <div key={i} className="rounded-xl h-[52px] bg-line/20 animate-pulse" />
+                ))}
             </div>
 
             <div className="flex flex-col gap-3">
@@ -679,32 +721,55 @@ export default function PersonalPage() {
           </div>
 
           {/* Insights */}
-          <div className="rounded-[20px] bg-white/60 backdrop-blur-xl border border-white/60 shadow-sm p-6">
+          <div 
+            onClick={() => router.push('/personal/insights')} 
+            className="group rounded-[20px] bg-white/60 backdrop-blur-xl border border-white/60 shadow-sm p-6 cursor-pointer hover:bg-white/80 hover:shadow-md transition-all duration-300"
+          >
             <div className="flex items-center justify-between mb-5">
               <h3 className="flex items-center gap-2 text-[11px] font-bold text-muted uppercase tracking-wider">
                 <LineChart size={14} /> Insights
               </h3>
+              <ArrowUpRight 
+                size={16} 
+                className="text-accent opacity-0 translate-y-1 -translate-x-1 group-hover:opacity-100 group-hover:translate-y-0 group-hover:translate-x-0 transition-all duration-300 ease-out" 
+              />
             </div>
 
             <div className="grid grid-cols-2 gap-5 mb-6">
+              
+              {/* --- ĐÃ NÂNG CẤP BIỂU ĐỒ TUẦN --- */}
               <div>
                 <p className="text-[10px] font-semibold text-muted uppercase mb-1">
-                  Hours (28d)
+                  Hours (This week)
                 </p>
                 <p className="font-serif text-xl font-bold text-ink mb-2">
-                  {loading ? "—" : totalHours}
+                  {loading ? "—" : currentWeekTotal}
                 </p>
-                <div className="flex items-end h-8 gap-1">
-                  {weekBars.map((hours, i) => (
-                    <div
-                      key={i}
-                      className="flex-1 bg-accent/40 rounded-sm"
-                      style={{
-                        height: `${(hours / maxWeekHour) * 100}%`,
-                        minHeight: "3px",
-                      }}
-                    />
-                  ))}
+                
+                {/* Wrap cả Bar và Label vào 1 cột dọc */}
+                <div className="flex flex-col gap-1.5 mt-auto">
+                  {/* Khu vực chứa cột */}
+                  <div className="flex items-end h-8 gap-1.5">
+                    {weekBars.map((bar, i) => (
+                      <div
+                        key={i}
+                        title={`${bar.hours}h - ${new Date(bar.fullDate).toLocaleDateString('en-US', {month: 'short', day: 'numeric'})}`}
+                        className="flex-1 bg-accent/30 rounded-[3px] group-hover:bg-accent transition-colors duration-500 relative"
+                        style={{
+                          height: `${(bar.hours / maxWeekHour) * 100}%`,
+                          minHeight: "4px",
+                        }}
+                      />
+                    ))}
+                  </div>
+                  {/* Khu vực chứa Label (M T W T F S S) */}
+                  <div className="flex items-center gap-1.5">
+                    {weekBars.map((bar, i) => (
+                      <div key={i} className="flex-1 text-center text-[8px] font-bold text-muted uppercase leading-none opacity-80">
+                        {bar.dayLabel}
+                      </div>
+                    ))}
+                  </div>
                 </div>
               </div>
 
@@ -736,13 +801,12 @@ export default function PersonalPage() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-7 gap-2">
+              <div className="grid grid-cols-7 gap-2 pointer-events-none">
                 {isMounted && !loading
                   ? heatmap.map((d, i) => (
                       <div
                         key={i}
                         className="w-full aspect-square"
-                        title={d.date.toDateString()}
                       >
                         <div
                           className={[

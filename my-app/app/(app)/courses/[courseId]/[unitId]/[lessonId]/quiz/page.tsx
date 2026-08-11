@@ -25,7 +25,7 @@ export default function QuizPage() {
   const [submitted, setSubmitted] = useState(false);
   const [score, setScore] = useState(0);
   const [loading, setLoading] = useState(true);
-
+  const startTimeRef = useState(() => Date.now())[0];
   useEffect(() => {
     let cancelled = false;
 
@@ -80,6 +80,7 @@ export default function QuizPage() {
         score: pct,
         passed: pct >= 70,
         answers,
+        time_spent_secs: Math.round((Date.now() - startTimeRef) / 1000),
       });
     }
   }

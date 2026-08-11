@@ -352,69 +352,90 @@ export default function ExplorePage() {
       </div>
 
       <div className="relative z-10 pt-[88vh] px-6 w-full max-w-[1200px] mx-auto pb-32">
-        <div className="flex items-center gap-10 border-b border-line/80 pb-3 mb-8">
-          {TABS.map(({ key, label }) => (
-            <button
-              key={key}
-              onClick={() => setTab(key)}
-              className="relative flex flex-col items-center pb-3 text-[15px] font-semibold transition-colors"
-            >
-              <span
-                className={tab === key ? "text-ink" : "text-muted hover:text-ink"}
+        <div className="sticky top-[80px] z-40 bg-[#F9F9F8]/90 backdrop-blur-md pt-4 pb-0 mb-8 -mx-6 px-6 border-b border-line/80">
+          <div className="flex items-center gap-10 pb-3">
+            {TABS.map(({ key, label }) => (
+              <button
+                key={key}
+                onClick={() => setTab(key)}
+                className="relative flex flex-col items-center pb-3 text-[15px] font-semibold transition-colors"
               >
-                {label}
-              </span>
-              {tab === key && (
-                <motion.span
-                  layoutId="active-tab"
-                  className="absolute -bottom-[1px] h-[2px] w-full bg-ink rounded-t-full"
-                />
-              )}
-            </button>
-          ))}
+                <span
+                  className={
+                    tab === key 
+                      ? "text-accent"
+                      : "text-muted hover:text-accent transition-colors"
+                  }
+                >
+                  {label}
+                </span>
+                {tab === key && (
+                  <motion.span
+                    layoutId="active-tab"
+                    className="absolute -bottom-[1px] h-[2px] w-full bg-ink rounded-t-full"
+                  />
+                )}
+              </button>
+            ))}
+          </div>
         </div>
 
-        {loading && (
-          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-            {[...Array(6)].map((_, i) => (
-              <div
-                key={i}
-                className="h-56 animate-pulse rounded-[32px] border border-line bg-white/40"
-              />
-            ))}
-          </div>
-        )}
+        <div className="min-h-[80vh]"> 
+          {/* ================= THAY ĐỔI Ở ĐÂY: ANIMATE PRESENCE ================= */}
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={tab}
+              // Trượt nhẹ lên trên (y: 10) và mờ dần giống như trang Schedule
+              initial={{ opacity: 0, y: 15 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -15 }}
+              transition={{ duration: 0.2, ease: "easeOut" }}
+            >
+              {loading && (
+                <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+                  {[...Array(6)].map((_, i) => (
+                    <div
+                      key={i}
+                      className="h-56 animate-pulse rounded-[32px] border border-line bg-white/40"
+                    />
+                  ))}
+                </div>
+              )}
 
-        {!loading && error && (
-          <div className="rounded-[32px] border border-line bg-white/80 backdrop-blur-md p-14 text-center text-sm text-muted shadow-sm">
-            <p className="text-xl mb-3 text-ink font-medium">Couldn&apos;t load courses</p>
-            {error}
-          </div>
-        )}
+              {!loading && error && (
+                <div className="rounded-[32px] border border-line bg-white/80 backdrop-blur-md p-14 text-center text-sm text-muted shadow-sm">
+                  <p className="text-xl mb-3 text-ink font-medium">Couldn&apos;t load courses</p>
+                  {error}
+                </div>
+              )}
 
-        {!loading && !error && visible.length === 0 && (
-          <div className="rounded-[32px] border border-line bg-white/80 backdrop-blur-md p-14 text-center text-sm text-muted shadow-sm">
-            <p className="text-xl mb-3 text-ink font-medium">
-              {tab === "recent" && "No recent activity 🌱"}
-              {tab === "recommend" && "Nothing to recommend yet 🌱"}
-              {tab === "trending" && "Nothing trending yet 🌱"}
-            </p>
-            {tab === "recent" &&
-              "Courses you preview in the last 7 days will show up here."}
-            {tab === "recommend" &&
-              "Search for a topic, and we'll recommend related courses."}
-            {tab === "trending" &&
-              "Trending courses appear once enrollment picks up."}
-          </div>
-        )}
+              {!loading && !error && visible.length === 0 && (
+                <div className="rounded-[32px] border border-line bg-white/80 backdrop-blur-md p-14 text-center text-sm text-muted shadow-sm">
+                  <p className="text-xl mb-3 text-ink font-medium">
+                    {tab === "recent" && "No recent activity 🌱"}
+                    {tab === "recommend" && "Nothing to recommend yet 🌱"}
+                    {tab === "trending" && "Nothing trending yet 🌱"}
+                  </p>
+                  {tab === "recent" &&
+                    "Courses you preview in the last 7 days will show up here."}
+                  {tab === "recommend" &&
+                    "Search for a topic, and we'll recommend related courses."}
+                  {tab === "trending" &&
+                    "Trending courses appear once enrollment picks up."}
+                </div>
+              )}
 
-        {!loading && !error && visible.length > 0 && (
-          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 items-start">
-            {visible.map((course) => (
-              <CourseCard key={course.id} course={course} />
-            ))}
-          </div>
-        )}
+              {!loading && !error && visible.length > 0 && (
+                <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 items-start">
+                  {visible.map((course) => (
+                    <CourseCard key={course.id} course={course} />
+                  ))}
+                </div>
+              )}
+            </motion.div>
+          </AnimatePresence>
+          {/* ==================================================================== */}
+        </div>
       </div>
     </div>
   );

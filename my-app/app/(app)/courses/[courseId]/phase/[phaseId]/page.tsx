@@ -34,6 +34,7 @@ export default function PhaseTestPage() {
   const [score, setScore] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const startTimeRef = useState(() => Date.now())[0];
 
   useEffect(() => {
     let cancelled = false;
@@ -107,6 +108,7 @@ export default function PhaseTestPage() {
       } else {
         wrongLessonIds.add(q.lesson_id);
       }
+      
     });
 
     const pct = questions.length > 0 ? (correct / questions.length) * 100 : 0;
@@ -120,15 +122,16 @@ export default function PhaseTestPage() {
 
     if (!user) return;
 
-    await supabase.from("submissions").insert({
-      learner_id: user.id,
-      course_id: courseId,
-      phase_id: phaseId,
-      submission_type: "unit_final",
-      score: pct,
-      passed,
-      answers,
-    });
+      await supabase.from("submissions").insert({
+        learner_id: user.id,
+        course_id: courseId,
+        phase_id: phaseId,
+        submission_type: "unit_final",
+        score: pct,
+        passed,
+        answers,
+        time_spent_secs: Math.round((Date.now() - startTimeRef) / 1000),
+      });
 
     if (passed) {
       // Mark every lesson in this phase complete, EXCEPT ones tied to a
