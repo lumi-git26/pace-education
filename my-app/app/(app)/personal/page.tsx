@@ -14,6 +14,10 @@ import {
   Award,
   Flame,
   LineChart,
+  Users,
+  Video,
+  ArrowUpRight,
+  MessageSquare,
 } from "lucide-react";
 
 type EnrolledCourse = { id: string; title: string; progress: number };
@@ -26,6 +30,19 @@ type NextLesson = {
 };
 type Goal = { title: string; daysLeft: number };
 type HeatmapDay = { date: Date; level: 0 | 1 | 2 | 3; hours: number };
+type ClassroomInfo = {
+  id: string;
+  title: string;
+  subjectCode: string | null;
+  cohortLabel: string | null;
+  meetingLink: string | null;
+  teacherName: string;
+  latestAnnouncement: {
+    title: string | null;
+    body: string;
+    type: string;
+  } | null;
+};
 
 function getNext7Days() {
   const days = [];
@@ -53,8 +70,6 @@ function computeStreak(dates: string[]): number {
   return streak;
 }
 
-// Buckets a day's total study seconds into a 0-3 heatmap intensity level.
-// Thresholds are arbitrary-but-reasonable; tune once real usage data exists.
 function levelFromSeconds(totalSeconds: number): 0 | 1 | 2 | 3 {
   const minutes = totalSeconds / 60;
   if (minutes <= 0) return 0;
@@ -77,13 +92,16 @@ export default function PersonalPage() {
   const [avgGrade, setAvgGrade] = useState<number | null>(null);
   const [heatmap, setHeatmap] = useState<HeatmapDay[]>([]);
   const [weekBars, setWeekBars] = useState<number[]>([0, 0, 0, 0, 0, 0, 0]);
+  const [classroom, setClassroom] = useState<ClassroomInfo | null>(null);
 
   const [loading, setLoading] = useState(true);
   const [isMounted, setIsMounted] = useState(false);
   const [isGoalVisible, setIsGoalVisible] = useState(false);
+  const [selectedDate, setSelectedDate] = useState<Date | null>(null);
 
   useEffect(() => {
     setIsMounted(true);
+    setSelectedDate(new Date());
   }, []);
 
   useEffect(() => {
@@ -114,8 +132,7 @@ export default function PersonalPage() {
       if (cancelled) return;
       setCourses(mapped);
 
-      // --- Continue learning: first incomplete lesson in first
-      // in-progress course ---
+      // --- Continue learning ---
       const inProgress = mapped.find((c) => c.progress < 100);
       if (inProgress) {
         const { data: units } = await supabase
@@ -163,7 +180,7 @@ export default function PersonalPage() {
         .eq("passed", true);
       if (!cancelled) setPassedCount(passed?.length ?? 0);
 
-      // --- Streak (from lesson completions) ---
+      // --- Streak ---
       const { data: allCompletions } = await supabase
         .from("lesson_completions")
         .select("completed_at")
@@ -174,7 +191,7 @@ export default function PersonalPage() {
         );
       }
 
-      // --- Goal (real, from learning_goals; none = card stays hidden) ---
+      // --- Goal ---
       const { data: goalRow } = await supabase
         .from("learning_goals")
         .select("title, target_date")
@@ -194,8 +211,7 @@ export default function PersonalPage() {
         setGoal({ title: goalRow.title, daysLeft });
       }
 
-      // --- Insights: hours + heatmap from real submissions
-      // (time_spent_secs) over the last 28 days ---
+      // --- Insights ---
       const twentyEightDaysAgo = new Date();
       twentyEightDaysAgo.setDate(twentyEightDaysAgo.getDate() - 27);
       twentyEightDaysAgo.setHours(0, 0, 0, 0);
@@ -208,15 +224,12 @@ export default function PersonalPage() {
 
       if (!cancelled) {
         const rows = recentSubmissions ?? [];
-
-        // Total hours across the window.
         const totalSeconds = rows.reduce(
           (sum: number, r: any) => sum + (r.time_spent_secs ?? 0),
           0
         );
         setTotalHours(Math.round((totalSeconds / 3600) * 10) / 10);
 
-        // Average score across submissions that have one.
         const scored = rows.filter((r: any) => r.score != null);
         setAvgGrade(
           scored.length > 0
@@ -228,11 +241,11 @@ export default function PersonalPage() {
             : null
         );
 
-        // Per-day seconds, for both the 28-day heatmap and the 7-day bars.
         const secondsByDay: Record<string, number> = {};
         rows.forEach((r: any) => {
           const key = new Date(r.submitted_at).toDateString();
-          secondsByDay[key] = (secondsByDay[key] ?? 0) + (r.time_spent_secs ?? 0);
+          secondsByDay[key] =
+            (secondsByDay[key] ?? 0) + (r.time_spent_secs ?? 0);
         });
 
         const days: HeatmapDay[] = [];
@@ -245,6 +258,39 @@ export default function PersonalPage() {
         }
         setHeatmap(days);
         setWeekBars(days.slice(-7).map((d) => Math.round(d.hours * 10) / 10));
+      }
+
+      // --- Classroom: first active membership, teacher name, latest post ---
+      const { data: membership } = await supabase
+        .from("classroom_members")
+        .select(
+          "classrooms(id, title, subject_code, cohort_label, meeting_link, teacher_id, profiles(full_name))"
+        )
+        .eq("learner_id", user.id)
+        .eq("status", "active")
+        .limit(1)
+        .maybeSingle();
+
+      if (!cancelled && membership?.classrooms) {
+        const c: any = membership.classrooms;
+
+        const { data: latestPost } = await supabase
+          .from("classroom_announcements")
+          .select("title, body, type")
+          .eq("classroom_id", c.id)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        setClassroom({
+          id: c.id,
+          title: c.title,
+          subjectCode: c.subject_code,
+          cohortLabel: c.cohort_label,
+          meetingLink: c.meeting_link,
+          teacherName: c.profiles?.full_name ?? "Instructor",
+          latestAnnouncement: latestPost ?? null,
+        });
       }
 
       setLoading(false);
@@ -271,7 +317,7 @@ export default function PersonalPage() {
 
   return (
     <div className="relative min-h-screen w-full px-8 py-12 lg:px-16 overflow-y-auto overflow-x-hidden">
-      {/* ============ DYNAMIC ISLAND (real goal only) ============ */}
+      {/* ============ DYNAMIC ISLAND ============ */}
       <AnimatePresence>
         {isGoalVisible && goal && (
           <motion.div
@@ -325,7 +371,124 @@ export default function PersonalPage() {
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_340px] gap-8">
         {/* ============ LEFT COLUMN ============ */}
         <div className="space-y-6">
-          {/* Continue learning */}
+          
+          {/* --- 1. ACTIVE CLASSROOM (ĐẨY LÊN TOP NẾU CÓ) --- */}
+          {loading ? (
+            <div className="rounded-[20px] bg-white/60 backdrop-blur-xl border border-white/60 shadow-sm p-6">
+              <div className="h-32 animate-pulse rounded-xl bg-line/40" />
+            </div>
+          ) : classroom ? (
+            <div className="rounded-[20px] bg-white/60 backdrop-blur-xl border border-white/60 shadow-sm p-6">
+              <div className="flex items-center justify-between mb-5">
+                <h3 className="flex items-center gap-2 text-[11px] font-bold text-muted uppercase tracking-wider">
+                  <Users size={14} /> Active Classroom
+                </h3>
+                {classroom.cohortLabel && (
+                  <span className="bg-indigo-50 border border-indigo-100 text-indigo-700 text-[9px] font-bold uppercase tracking-widest px-2.5 py-1 rounded-full">
+                    {classroom.cohortLabel}
+                  </span>
+                )}
+              </div>
+
+              <div className="flex flex-col md:flex-row gap-5">
+                <div
+                  onClick={() => router.push(`/personal/classroom/${classroom.id}`)}
+                  className="flex-1 rounded-xl bg-white/40 border border-white p-5 hover:bg-white/60 transition-colors cursor-pointer group"
+                >
+                  <div className="flex items-start gap-4 mb-3">
+                    <div className="w-12 h-12 rounded-[14px] bg-gradient-to-br from-indigo-500 to-purple-600 text-white flex items-center justify-center shadow-sm shrink-0">
+                      <span className="font-serif font-bold text-lg">
+                        {classroom.subjectCode?.slice(0, 2).toUpperCase() ?? "CL"}
+                      </span>
+                    </div>
+                    <div>
+                      {classroom.subjectCode && (
+                        <p className="text-[10px] font-bold text-indigo-600 uppercase tracking-wider mb-1">
+                          {classroom.subjectCode}
+                        </p>
+                      )}
+                      <p className="text-[15px] font-semibold text-ink leading-tight group-hover:text-indigo-600 transition-colors">
+                        {classroom.title}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between mt-5 pt-4 border-t border-line/50">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-7 h-7 rounded-full bg-ink/10 flex items-center justify-center text-[10px] font-bold text-ink/70">
+                        {classroom.teacherName.charAt(0)}
+                      </div>
+                      <div>
+                        <p className="text-[9px] text-muted uppercase tracking-wider font-bold mb-0.5">
+                          Lecturer
+                        </p>
+                        <p className="text-[12px] font-semibold text-ink">
+                          {classroom.teacherName}
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        router.push(`/personal/classroom/${classroom.id}#message`);
+                      }}
+                      className="text-muted hover:text-indigo-600 transition-colors"
+                    >
+                      <MessageSquare size={16} />
+                    </button>
+                  </div>
+                </div>
+
+                <div className="w-full md:w-[240px] flex flex-col gap-3">
+                  {classroom.meetingLink ? (
+                    <a
+                      href={classroom.meetingLink}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center justify-between w-full rounded-xl bg-ink text-white p-4 hover:bg-indigo-600 hover:shadow-md transition-all group"
+                    >
+                      <div className="flex items-center gap-3">
+                        <Video size={16} className="text-white/70 group-hover:text-white" />
+                        <span className="text-[13px] font-semibold">Join Class Meet</span>
+                      </div>
+                      <ArrowUpRight size={14} className="opacity-50 group-hover:opacity-100" />
+                    </a>
+                  ) : (
+                    <div className="flex items-center justify-between w-full rounded-xl bg-line/40 text-muted p-4 opacity-60 cursor-not-allowed">
+                      <div className="flex items-center gap-3">
+                        <Video size={16} />
+                        <span className="text-[13px] font-semibold">No meeting link yet</span>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="flex-1 rounded-xl border border-dashed border-line/80 bg-[#F9F9F8] p-4 flex flex-col justify-center relative overflow-hidden group hover:border-indigo-200 transition-colors">
+                    {classroom.latestAnnouncement ? (
+                      <>
+                        <p className="text-[10px] font-bold text-muted uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
+                          <span className="w-1.5 h-1.5 rounded-full bg-orange-400" />
+                          {classroom.latestAnnouncement.type === "homework"
+                            ? "Homework"
+                            : classroom.latestAnnouncement.type === "material"
+                            ? "New Material"
+                            : "Latest Announcement"}
+                        </p>
+                        <p className="text-[12px] text-ink/80 leading-relaxed line-clamp-3 font-medium">
+                          {classroom.latestAnnouncement.body}
+                        </p>
+                      </>
+                    ) : (
+                      <p className="text-[12px] text-muted leading-relaxed">
+                        No announcements yet.
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : null}
+
+          {/* --- 2. CONTINUE LEARNING --- */}
           <div className="rounded-[20px] bg-white/60 backdrop-blur-xl border border-white/60 shadow-sm p-6">
             <h3 className="text-[11px] font-bold text-muted uppercase tracking-wider mb-4">
               Continue learning
@@ -375,7 +538,7 @@ export default function PersonalPage() {
             )}
           </div>
 
-          {/* Self-paced courses */}
+          {/* --- 3. SELF-PACED COURSES --- */}
           <div className="rounded-[20px] bg-white/60 backdrop-blur-xl border border-white/60 shadow-sm p-6">
             <h3 className="text-[11px] font-bold text-muted uppercase tracking-wider mb-5">
               Self-paced Courses
@@ -416,16 +579,31 @@ export default function PersonalPage() {
             )}
           </div>
 
-          {/*
-            Active Classroom intentionally omitted here.
-            There is no cohort/classroom/instructor schema in the
-            database yet (no tables for classes, enrollments-to-cohort,
-            instructors, or announcements). Rendering it with real
-            data isn't possible without that schema — building it as
-            a fake/mocked block would violate the "no random data"
-            requirement. Once cohort/classroom tables exist, this is
-            a clean drop-in slot for that component.
-          */}
+          {/* --- 4. EMPTY CLASSROOM (ĐẨY XUỐNG BOTTOM NẾU KHÔNG CÓ LỚP) --- */}
+          {!loading && !classroom && (
+            <div className="rounded-[20px] bg-white/60 backdrop-blur-xl border border-white/60 shadow-sm p-6">
+              <h3 className="flex items-center gap-2 text-[11px] font-bold text-muted uppercase tracking-wider mb-5">
+                <Users size={14} /> Active Classroom
+              </h3>
+              
+              <div className="rounded-xl border border-dashed border-line/80 bg-[#F9F9F8] p-8 flex flex-col items-center justify-center text-center transition-colors hover:border-indigo-200">
+                <div className="w-12 h-12 rounded-full bg-indigo-50 flex items-center justify-center text-indigo-400 mb-4 shadow-sm">
+                  <Users size={20} />
+                </div>
+                <p className="text-[14px] font-semibold text-ink mb-1.5">No active classes</p>
+                <p className="text-[12px] text-muted mb-5 max-w-[260px] leading-relaxed">
+                  Join an instructor-led cohort to get live sessions, peer interactions, and the latest announcements.
+                </p>
+                <button
+                  onClick={() => router.push("/explore")}
+                  className="rounded-lg bg-ink text-white px-5 py-2.5 text-[12px] font-medium hover:bg-indigo-600 transition-colors shadow-sm"
+                >
+                  Explore Classes
+                </button>
+              </div>
+            </div>
+          )}
+
         </div>
 
         {/* ============ RIGHT COLUMN ============ */}
@@ -439,14 +617,16 @@ export default function PersonalPage() {
             <div className="grid grid-cols-7 gap-1.5 mb-6">
               {isMounted
                 ? scheduleDays.map((d) => {
-                    const isToday =
-                      d.toDateString() === new Date().toDateString();
+                    const isSelected =
+                      selectedDate &&
+                      d.toDateString() === selectedDate.toDateString();
                     return (
-                      <div
+                      <button
                         key={d.toISOString()}
+                        onClick={() => setSelectedDate(d)}
                         className={[
-                          "relative flex flex-col items-center gap-1 rounded-xl py-2.5 text-center transition-colors",
-                          isToday
+                          "relative flex flex-col items-center gap-1 rounded-xl py-2.5 text-center transition-colors duration-200 cursor-pointer",
+                          isSelected
                             ? "bg-ink text-white shadow-sm"
                             : "text-ink/70 hover:bg-white/60",
                         ].join(" ")}
@@ -459,7 +639,7 @@ export default function PersonalPage() {
                         <span className="text-[14px] font-bold">
                           {d.getDate()}
                         </span>
-                      </div>
+                      </button>
                     );
                   })
                 : Array.from({ length: 7 }).map((_, i) => (
@@ -472,14 +652,29 @@ export default function PersonalPage() {
 
             <div className="flex flex-col gap-3">
               <h4 className="text-[11px] font-bold text-muted uppercase tracking-wider">
-                Today&apos;s Agenda
+                {selectedDate?.toDateString() === new Date().toDateString()
+                  ? "Today's Agenda"
+                  : selectedDate?.toLocaleDateString("en-US", {
+                      weekday: "long",
+                      month: "short",
+                      day: "numeric",
+                    })}
               </h4>
-              <div className="rounded-xl border border-dashed border-line/80 bg-[#F9F9F8] p-5 text-center">
-                <p className="text-[12px] text-muted leading-relaxed">
-                  No major tasks today. Scheduled reviews will appear here once
-                  pacing preferences are set up.
-                </p>
-              </div>
+              <AnimatePresence mode="wait">
+                <motion.div
+                  key={selectedDate?.toDateString()}
+                  initial={{ opacity: 0, x: 8 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -8 }}
+                  transition={{ duration: 0.2 }}
+                  className="rounded-xl border border-dashed border-line/80 bg-[#F9F9F8] p-5 text-center"
+                >
+                  <p className="text-[12px] text-muted leading-relaxed">
+                    No major tasks. Scheduled reviews will appear here once
+                    pacing preferences are set up.
+                  </p>
+                </motion.div>
+              </AnimatePresence>
             </div>
           </div>
 
@@ -544,7 +739,11 @@ export default function PersonalPage() {
               <div className="grid grid-cols-7 gap-2">
                 {isMounted && !loading
                   ? heatmap.map((d, i) => (
-                      <div key={i} className="w-full aspect-square" title={d.date.toDateString()}>
+                      <div
+                        key={i}
+                        className="w-full aspect-square"
+                        title={d.date.toDateString()}
+                      >
                         <div
                           className={[
                             "w-full h-full rounded-[4px] transition-all",
