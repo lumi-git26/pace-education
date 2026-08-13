@@ -3,16 +3,16 @@
 import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Sun, Sunset, Moon, Calendar as CalendarIcon } from "lucide-react";
+import { X, Calendar as CalendarIcon } from "lucide-react";
 import { supabase } from "@/lib/supabase/client";
 
-const TIME_OPTIONS = [
-  { key: "morning", label: "Morning", icon: Sun },
-  { key: "afternoon", label: "Afternoon", icon: Sunset },
-  { key: "evening", label: "Evening", icon: Moon },
+const TIME_ROWS = [
+  { key: "morning", label: "Morning" },
+  { key: "afternoon", label: "Afternoon" },
+  { key: "evening", label: "Evening" },
 ] as const;
 
-const DAY_OPTIONS = [
+const DAY_COLS = [
   { key: 0, label: "Sun" },
   { key: 1, label: "Mon" },
   { key: 2, label: "Tue" },
@@ -21,6 +21,12 @@ const DAY_OPTIONS = [
   { key: 5, label: "Fri" },
   { key: 6, label: "Sat" },
 ];
+
+type Slot = { day: number; time: string };
+
+function slotKey(day: number, time: string) {
+  return `${day}-${time}`;
+}
 
 function weeksBetween(from: Date, to: Date): number {
   const ms = to.getTime() - from.getTime();
@@ -37,8 +43,7 @@ export default function PreferenceModal({
   onSaved?: () => void;
 }) {
   const [mounted, setMounted] = useState(false);
-  const [timesOfDay, setTimesOfDay] = useState<string[]>([]);
-  const [days, setDays] = useState<number[]>([]);
+  const [selectedSlots, setSelectedSlots] = useState<Set<string>>(new Set());
   const [hasDeadline, setHasDeadline] = useState(false);
   const [targetDate, setTargetDate] = useState("");
   const [totalLessons, setTotalLessons] = useState<number | null>(null);
@@ -76,18 +81,25 @@ export default function PreferenceModal({
     };
   }, [courseId]);
 
-  // Suggested pace: only meaningful once days are picked and a deadline
-  // is set, since it's grounded in "how many study sessions can actually
-  // happen" rather than guessed at.
+  // Distinct days represented among selected slots — used both for the
+  // "pick at least one" gate and to cap lessons/week suggestions.
+  const distinctDays = useMemo(() => {
+    const days = new Set<number>();
+    selectedSlots.forEach((key) => {
+      const [day] = key.split("-");
+      days.add(Number(day));
+    });
+    return days;
+  }, [selectedSlots]);
+
   const suggestedLessonsPerWeek = useMemo(() => {
-    if (!hasDeadline || !targetDate || days.length === 0 || !totalLessons) {
+    if (!hasDeadline || !targetDate || distinctDays.size === 0 || !totalLessons) {
       return null;
     }
     const weeks = weeksBetween(new Date(), new Date(targetDate));
     const raw = totalLessons / weeks;
-    // Can't suggest more sessions per week than available days.
-    return Math.min(days.length, Math.max(1, Math.ceil(raw)));
-  }, [hasDeadline, targetDate, days, totalLessons]);
+    return Math.min(distinctDays.size, Math.max(1, Math.ceil(raw)));
+  }, [hasDeadline, targetDate, distinctDays, totalLessons]);
 
   useEffect(() => {
     if (suggestedLessonsPerWeek != null && lessonsPerWeek == null) {
@@ -103,16 +115,14 @@ export default function PreferenceModal({
     return d;
   }, [lessonsPerWeek, totalLessons]);
 
-  function toggleTime(key: string) {
-    setTimesOfDay((prev) =>
-      prev.includes(key) ? prev.filter((t) => t !== key) : [...prev, key]
-    );
-  }
-
-  function toggleDay(key: number) {
-    setDays((prev) =>
-      prev.includes(key) ? prev.filter((d) => d !== key) : [...prev, key]
-    );
+  function toggleSlot(day: number, time: string) {
+    const key = slotKey(day, time);
+    setSelectedSlots((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
   }
 
   async function handleSave() {
@@ -129,7 +139,6 @@ export default function PreferenceModal({
       return;
     }
 
-    // Ensure a learner_preferences row exists (defaults are fine here).
     await supabase
       .from("learner_preferences")
       .upsert(
@@ -137,11 +146,15 @@ export default function PreferenceModal({
         { onConflict: "learner_id", ignoreDuplicates: true }
       );
 
+    const availability: Slot[] = Array.from(selectedSlots).map((key) => {
+      const [day, time] = key.split("-");
+      return { day: Number(day), time };
+    });
+
     const { error } = await supabase.from("schedule_preferences").insert({
       learner_id: user.id,
       course_id: courseId,
-      time_of_day: timesOfDay,
-      available_days: days,
+      availability,
       target_date: hasDeadline && targetDate ? targetDate : null,
       lessons_per_week: lessonsPerWeek,
     });
@@ -178,7 +191,7 @@ export default function PreferenceModal({
           exit={{ opacity: 0, y: 12, scale: 0.98 }}
           transition={{ duration: 0.2, ease: "easeOut" }}
           onClick={(e: React.MouseEvent) => e.stopPropagation()}
-          className="relative w-full max-w-md rounded-[28px] bg-paper shadow-2xl p-7 max-h-[85vh] overflow-y-auto"
+          className="relative w-full max-w-lg rounded-[28px] bg-paper shadow-2xl p-7 max-h-[85vh] overflow-y-auto"
         >
           <button
             onClick={handleSkip}
@@ -192,60 +205,52 @@ export default function PreferenceModal({
             When do you want to study?
           </h2>
           <p className="text-sm text-muted mb-6">
-            This helps us pace your lessons. You can change this anytime.
+            Tap the times that work for you. You can change this anytime.
           </p>
 
-          {/* Time of day */}
-          <div className="mb-6">
-            <p className="text-xs font-bold text-muted uppercase tracking-wider mb-3">
-              Time of day
-            </p>
-            <div className="grid grid-cols-3 gap-2">
-              {TIME_OPTIONS.map(({ key, label, icon: Icon }) => {
-                const active = timesOfDay.includes(key);
-                return (
-                  <button
-                    key={key}
-                    onClick={() => toggleTime(key)}
-                    className={[
-                      "flex flex-col items-center gap-1.5 rounded-2xl py-3 text-xs font-medium transition-colors border",
-                      active
-                        ? "bg-ink text-white border-ink"
-                        : "bg-white/60 text-ink/70 border-line/60 hover:bg-ink/5",
-                    ].join(" ")}
-                  >
-                    <Icon size={16} />
-                    {label}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Days available */}
-          <div className="mb-6">
-            <p className="text-xs font-bold text-muted uppercase tracking-wider mb-3">
-              Days available
-            </p>
-            <div className="grid grid-cols-7 gap-1.5">
-              {DAY_OPTIONS.map(({ key, label }) => {
-                const active = days.includes(key);
-                return (
-                  <button
-                    key={key}
-                    onClick={() => toggleDay(key)}
-                    className={[
-                      "flex items-center justify-center rounded-xl py-2.5 text-[11px] font-semibold transition-colors border",
-                      active
-                        ? "bg-accent text-white border-accent"
-                        : "bg-white/60 text-ink/70 border-line/60 hover:bg-ink/5",
-                    ].join(" ")}
-                  >
-                    {label}
-                  </button>
-                );
-              })}
-            </div>
+          {/* Day x Time grid */}
+          <div className="mb-6 overflow-x-auto">
+            <table className="w-full border-separate border-spacing-1.5 min-w-[420px]">
+              <thead>
+                <tr>
+                  <th className="w-16" />
+                  {DAY_COLS.map((d) => (
+                    <th
+                      key={d.key}
+                      className="text-[10px] font-bold text-muted uppercase pb-1"
+                    >
+                      {d.label}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {TIME_ROWS.map((row) => (
+                  <tr key={row.key}>
+                    <td className="text-xs font-medium text-ink/70 pr-2 whitespace-nowrap">
+                      {row.label}
+                    </td>
+                    {DAY_COLS.map((d) => {
+                      const active = selectedSlots.has(slotKey(d.key, row.key));
+                      return (
+                        <td key={d.key}>
+                          <button
+                            onClick={() => toggleSlot(d.key, row.key)}
+                            aria-label={`${row.label} ${d.label}`}
+                            className={[
+                              "w-full aspect-square rounded-lg transition-colors border",
+                              active
+                                ? "bg-accent border-accent"
+                                : "bg-white/60 border-line/60 hover:bg-ink/5",
+                            ].join(" ")}
+                          />
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
 
           {/* Deadline */}
@@ -277,9 +282,9 @@ export default function PreferenceModal({
                 />
               </div>
 
-              {days.length === 0 && (
+              {distinctDays.size === 0 && (
                 <p className="text-xs text-muted">
-                  Pick at least one available day to see a suggested pace.
+                  Select at least one time slot to see a suggested pace.
                 </p>
               )}
 
@@ -292,11 +297,14 @@ export default function PreferenceModal({
                     <input
                       type="number"
                       min={1}
-                      max={days.length}
+                      max={distinctDays.size}
                       value={lessonsPerWeek ?? suggestedLessonsPerWeek}
                       onChange={(e) =>
                         setLessonsPerWeek(
-                          Math.max(1, Math.min(days.length, Number(e.target.value)))
+                          Math.max(
+                            1,
+                            Math.min(distinctDays.size, Number(e.target.value))
+                          )
                         )
                       }
                       className="w-16 rounded-lg border border-line px-2 py-1 text-sm text-center outline-none focus:border-accent"
