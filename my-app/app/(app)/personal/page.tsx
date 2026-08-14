@@ -18,6 +18,7 @@ import {
   Video,
   ArrowUpRight,
   MessageSquare,
+  Sparkles,
 } from "lucide-react";
 
 type EnrolledCourse = { id: string; title: string; progress: number };
@@ -47,7 +48,6 @@ type ClassroomInfo = {
   } | null;
 };
 
-// Cập nhật Type mới theo cấu trúc bảng scheduled_tasks của Claude
 type ScheduledTask = {
   id: string;
   scheduled_date: string;
@@ -116,7 +116,6 @@ export default function PersonalPage() {
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [activeDays, setActiveDays] = useState<Set<string>>(new Set());
   
-  // Cập nhật State để dùng Type mới
   const [tasksByDay, setTasksByDay] = useState<Record<string, ScheduledTask[]>>({});
 
   useEffect(() => {
@@ -231,7 +230,7 @@ export default function PersonalPage() {
         setGoal({ title: goalRow.title, daysLeft });
       }
 
-      // --- Insights (Heatmap & Weekly Chart) ---
+      // --- Insights ---
       const twentyEightDaysAgo = new Date();
       twentyEightDaysAgo.setDate(twentyEightDaysAgo.getDate() - 27);
       twentyEightDaysAgo.setHours(0, 0, 0, 0);
@@ -306,7 +305,7 @@ export default function PersonalPage() {
         );
       }
 
-      // ================= CẬP NHẬT LOGIC CỦA CLAUDE TẠI ĐÂY =================
+      // --- Scheduled Tasks ---
       const { data: upcomingTasks } = await supabase
         .from("scheduled_tasks")
         .select("id, scheduled_date, type, reference_id, course_id, estimated_minutes, status, courses(title)")
@@ -323,7 +322,6 @@ export default function PersonalPage() {
         });
         setTasksByDay(grouped);
       }
-      // ====================================================================
 
       // --- Classroom ---
       const { data: membership } = await supabase
@@ -675,7 +673,7 @@ export default function PersonalPage() {
         {/* ============ RIGHT COLUMN ============ */}
         <div className="space-y-6">
           
-          {/* ================= CẬP NHẬT UI LOGIC CHO WIDGET SCHEDULE CỦA CLAUDE ================= */}
+          {/* ================= SCHEDULE WIDGET MỚI ================= */}
           <div className="rounded-[20px] bg-white/60 backdrop-blur-xl border border-white/60 shadow-sm p-6">
             <div className="flex items-center gap-2 text-sm font-bold text-ink mb-5">
               <CalendarIcon size={16} /> Schedule
@@ -737,32 +735,64 @@ export default function PersonalPage() {
                   animate={{ opacity: 1, x: 0 }}
                   exit={{ opacity: 0, x: -8 }}
                   transition={{ duration: 0.2 }}
-                  className="space-y-2"
+                  className="space-y-2.5"
                 >
                   {selectedDate &&
                   (tasksByDay[selectedDate.toDateString()]?.length ?? 0) > 0 ? (
-                    tasksByDay[selectedDate.toDateString()].map((t: any) => (
-                      <div
-                        key={t.id}
-                        onClick={() => {
-                          if (t.type === "course" && t.course_id) {
-                            router.push(`/courses/${t.course_id}`);
-                          }
-                        }}
-                        className="rounded-xl bg-accent/10 p-3.5 cursor-pointer hover:bg-accent/15 transition-colors"
-                      >
-                        <p className="text-[10px] font-bold uppercase text-accent tracking-wide mb-0.5">
-                          {t.type === "course"
-                            ? t.courses?.title ?? "Lesson"
-                            : t.type === "review"
-                            ? "Review"
-                            : "Class"}
-                        </p>
-                        <p className="text-xs text-ink/80">
-                          {t.estimated_minutes} min
-                        </p>
-                      </div>
-                    ))
+                    tasksByDay[selectedDate.toDateString()].map((t: any) => {
+                      // 1. Phân tích loại Task để chọn Icon và Màu sắc phù hợp
+                      const isCourse = t.type === "course";
+                      const isReview = t.type === "review";
+                      const TaskIcon = isCourse ? BookOpen : isReview ? Sparkles : Video;
+                      
+                      const iconBg = isCourse 
+                        ? "bg-accent/10 text-accent" 
+                        : isReview 
+                        ? "bg-orange-50 text-orange-500" 
+                        : "bg-indigo-50 text-indigo-500";
+                  
+                      const title = isCourse 
+                        ? t.courses?.title ?? "Lesson" 
+                        : isReview 
+                        ? "Spaced Repetition" 
+                        : "Live Class";
+                  
+                      return (
+                        <div
+                          key={t.id}
+                          onClick={() => {
+                            if (isCourse && t.course_id) {
+                              router.push(`/courses/${t.course_id}`);
+                            }
+                          }}
+                          className="group flex items-center justify-between p-4 rounded-[16px] bg-white/60 border border-white/80 shadow-[0_2px_8px_-4px_rgba(0,0,0,0.05)] backdrop-blur-md cursor-pointer hover:bg-white/90 hover:shadow-md hover:-translate-y-0.5 transition-all duration-300"
+                        >
+                          <div className="flex items-start gap-3.5">
+                            {/* Khối Icon bên trái */}
+                            <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 mt-0.5 transition-colors ${iconBg}`}>
+                              <TaskIcon size={18} strokeWidth={2.5} />
+                            </div>
+                            
+                            {/* Nội dung chính */}
+                            <div className="text-left flex flex-col justify-center min-h-[40px]">
+                              <p className="text-[14px] font-semibold text-ink leading-tight mb-1 group-hover:text-accent transition-colors line-clamp-1">
+                                {title}
+                              </p>
+                              <div className="flex items-center gap-2 text-[10px] font-bold text-muted uppercase tracking-wider">
+                                <span>{t.estimated_minutes} min</span>
+                                <span className="w-1 h-1 rounded-full bg-line/80" />
+                                <span>{t.type}</span>
+                              </div>
+                            </div>
+                          </div>
+                  
+                          {/* Nút Play/Hành động hiện ra khi Hover */}
+                          <button className="flex items-center justify-center w-8 h-8 shrink-0 rounded-full bg-ink/5 text-ink/40 group-hover:bg-accent group-hover:text-white transition-colors duration-300">
+                            <PlayCircle size={16} />
+                          </button>
+                        </div>
+                      );
+                    })
                   ) : (
                     <div className="rounded-xl border border-dashed border-line/80 bg-[#F9F9F8] p-5 text-center">
                       <p className="text-[12px] text-muted leading-relaxed">
