@@ -19,6 +19,8 @@ import {
   ArrowUpRight,
   MessageSquare,
   Sparkles,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 
 type EnrolledCourse = { id: string; title: string; progress: number };
@@ -100,7 +102,10 @@ export default function PersonalPage() {
   const [courses, setCourses] = useState<EnrolledCourse[]>([]);
   const [nextLessons, setNextLessons] = useState<NextLesson[]>([]);
   const [classrooms, setClassrooms] = useState<ClassroomInfo[]>([]);
-  const [totalClassrooms, setTotalClassrooms] = useState(0);
+
+  // === THÊM STATE CHO LOGIC EXPAND/COLLAPSE ===
+  const [showAllClasses, setShowAllClasses] = useState(false);
+  const [showAllCourses, setShowAllCourses] = useState(false);
 
   const [passedCount, setPassedCount] = useState(0);
   const [streak, setStreak] = useState(0);
@@ -322,22 +327,18 @@ export default function PersonalPage() {
         setTasksByDay(grouped);
       }
 
-      // --- Classrooms (Lấy nhiều lớp, hiển thị tối đa 2 lớp) ---
-      const { data: membership, count: classCount } = await supabase
+      // --- Classrooms (Lấy tất cả các lớp, hiển thị sẽ do mảng UI lo) ---
+      const { data: membership } = await supabase
         .from("classroom_members")
         .select(
-          "classrooms(id, title, subject_code, cohort_label, meeting_link, teacher_id, profiles(full_name))",
-          { count: "exact" }
+          "classrooms(id, title, subject_code, cohort_label, meeting_link, teacher_id, profiles(full_name))"
         )
         .eq("learner_id", user.id)
         .eq("status", "active");
-        // FIX: Đã xóa lệnh .order("created_at") gây lỗi ngầm ở đây
 
       if (!cancelled && membership) {
-        setTotalClassrooms(classCount ?? membership.length);
         const loadedClasses: ClassroomInfo[] = [];
 
-        // Đảo ngược mảng bằng JS để đẩy lớp mới nhất lên đầu thay vì dùng SQL Order
         const reversed = [...membership].reverse();
 
         for (let i = 0; i < reversed.length; i++) {
@@ -345,8 +346,8 @@ export default function PersonalPage() {
           if (!c) continue;
 
           let latestPost = null;
-          // Chỉ lấy Announcements cho 2 lớp học hiển thị trên UI để tiết kiệm tài nguyên
-          if (i < 2) {
+          // Chỉ lấy Announcements cho tối đa 5 lớp đầu để tối ưu
+          if (i < 5) {
             const { data } = await supabase
               .from("classroom_announcements")
               .select("title, body, type")
@@ -392,6 +393,10 @@ export default function PersonalPage() {
   const scheduleDays = getNext7Days();
   const currentWeekTotal = weekBars.reduce((sum, b) => sum + b.hours, 0).toFixed(1);
   const maxWeekHour = Math.max(1, ...weekBars.map((b) => b.hours));
+
+  // Phân trang bằng UI
+  const visibleClasses = showAllClasses ? classrooms : classrooms.slice(0, 2);
+  const visibleCourses = showAllCourses ? courses : courses.slice(0, 3);
 
   return (
     <div className="relative min-h-screen w-full px-8 py-12 lg:px-16 overflow-y-auto overflow-x-hidden">
@@ -461,14 +466,21 @@ export default function PersonalPage() {
                 <Users size={14} /> Active Classrooms
               </h3>
 
-              <div className="flex flex-col gap-6">
-                {classrooms.slice(0, 2).map((cls, idx) => (
-                  <div key={cls.id} className={idx > 0 ? "pt-6 border-t border-line/60" : ""}>
-                    <div className="flex flex-col md:flex-row gap-5">
-                      {/* Left: Info Card */}
+              <div className="flex flex-col gap-4">
+                <AnimatePresence initial={false}>
+                  {visibleClasses.map((cls) => (
+                    <motion.div 
+                      layout
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, scale: 0.95 }}
+                      key={cls.id} 
+                      className="p-5 rounded-[20px] bg-white border border-line/50 shadow-sm flex flex-col md:flex-row gap-5 transition-shadow hover:shadow-md"
+                    >
+                      {/* Left: Info Block */}
                       <div
                         onClick={() => router.push(`/personal/classroom/${cls.id}`)}
-                        className="flex-1 rounded-xl bg-white/40 border border-white p-5 hover:bg-white/60 transition-colors cursor-pointer group flex flex-col justify-between"
+                        className="flex-1 cursor-pointer group flex flex-col justify-between"
                       >
                         <div className="flex items-start justify-between mb-3">
                           <div className="flex items-start gap-4">
@@ -495,7 +507,7 @@ export default function PersonalPage() {
                           )}
                         </div>
 
-                        <div className="flex items-center justify-between mt-5 pt-4 border-t border-line/50">
+                        <div className="flex items-center justify-between mt-5 pt-4 border-t border-line/40">
                           <div className="flex items-center gap-2.5">
                             <div className="w-7 h-7 rounded-full bg-ink/10 flex items-center justify-center text-[10px] font-bold text-ink/70">
                               {cls.teacherName.charAt(0)}
@@ -537,8 +549,8 @@ export default function PersonalPage() {
                             <ArrowUpRight size={14} className="opacity-50 group-hover:opacity-100" />
                           </a>
                         ) : (
-                          <div className="flex items-center justify-between w-full rounded-xl bg-line/40 text-muted p-4 opacity-60 cursor-not-allowed">
-                            <div className="flex items-center gap-3">
+                          <div className="flex items-center justify-between w-full rounded-xl bg-[#F9F9F8] border border-line/40 text-muted p-4">
+                            <div className="flex items-center gap-3 opacity-60">
                               <Video size={16} />
                               <span className="text-[13px] font-semibold">No meeting link yet</span>
                             </div>
@@ -567,18 +579,21 @@ export default function PersonalPage() {
                           )}
                         </div>
                       </div>
-                    </div>
-                  </div>
-                ))}
+                    </motion.div>
+                  ))}
+                </AnimatePresence>
               </div>
 
-              {/* View More Button */}
-              {totalClassrooms > 2 && (
+              {/* View More / Show Less Button */}
+              {classrooms.length > 2 && (
                 <button 
-                  onClick={() => router.push('/personal/classrooms')}
-                  className="w-full text-center mt-2 pt-4 border-t border-line/40 text-[13px] font-semibold text-muted hover:text-accent transition-colors"
+                  onClick={() => setShowAllClasses(!showAllClasses)}
+                  className="w-full flex flex-col items-center justify-center text-center mt-2 border-t border-line/40 pt-4 text-[13px] font-semibold text-muted hover:text-accent transition-colors"
                 >
-                  View all {totalClassrooms} classes
+                  <div className="flex items-center gap-1">
+                    {showAllClasses ? "Show less" : `View all ${classrooms.length} classes`}
+                    {showAllClasses ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                  </div>
                 </button>
               )}
             </div>
@@ -624,7 +639,7 @@ export default function PersonalPage() {
                     onClick={() =>
                       router.push(`/courses/${lesson.courseId}/${lesson.unitId}/${lesson.lessonId}`)
                     }
-                    className="group flex items-center justify-between gap-4 rounded-xl bg-accent/5 hover:bg-accent/10 transition-all duration-300 p-4 border border-accent/10 cursor-pointer"
+                    className="group flex items-center justify-between gap-4 rounded-[16px] bg-white border border-line/50 shadow-sm hover:shadow-md hover:border-accent/40 transition-all duration-300 p-4 cursor-pointer"
                   >
                     <div>
                       <p className="text-[11px] font-bold uppercase tracking-wide text-accent mb-1 line-clamp-1">
@@ -653,7 +668,7 @@ export default function PersonalPage() {
                 </button>
               </div>
             ) : (
-              <div className="flex items-center gap-3 rounded-xl bg-green-50 p-4 border border-green-100">
+              <div className="flex items-center gap-3 rounded-[16px] bg-green-50 p-4 border border-green-100 shadow-sm">
                 <CheckCircle2 className="text-green-600" size={18} />
                 <p className="text-sm font-medium text-ink">
                   You&apos;re all caught up! Take a break.
@@ -662,7 +677,7 @@ export default function PersonalPage() {
             )}
           </div>
 
-          {/* --- 3. SELF-PACED COURSES (Hiện max 3 cái) --- */}
+          {/* --- 3. SELF-PACED COURSES --- */}
           <div className="rounded-[20px] bg-white/60 backdrop-blur-xl border border-white/60 shadow-sm p-6">
             <h3 className="text-[11px] font-bold text-muted uppercase tracking-wider mb-5">
               Self-paced Courses
@@ -677,37 +692,46 @@ export default function PersonalPage() {
               <p className="text-sm text-muted">No active courses yet.</p>
             ) : (
               <>
-                <div className="space-y-5">
-                  {courses.slice(0, 3).map((c) => (
-                    <button
-                      key={c.id}
-                      onClick={() => router.push(`/courses/${c.id}`)}
-                      className="w-full text-left group"
-                    >
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-sm font-semibold text-ink group-hover:text-accent transition-colors truncate pr-4">
-                          {c.title}
-                        </span>
-                        <span className="text-xs font-bold text-muted group-hover:text-accent transition-colors">
-                          {c.progress}%
-                        </span>
-                      </div>
-                      <div className="w-full bg-line/60 rounded-full h-1.5 overflow-hidden shadow-inner">
-                        <div
-                          className="bg-accent h-1.5 rounded-full transition-all duration-700 ease-out"
-                          style={{ width: `${c.progress}%` }}
-                        />
-                      </div>
-                    </button>
-                  ))}
+                <div className="space-y-3">
+                  <AnimatePresence initial={false}>
+                    {visibleCourses.map((c) => (
+                      <motion.button
+                        layout
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, scale: 0.95 }}
+                        key={c.id}
+                        onClick={() => router.push(`/courses/${c.id}`)}
+                        className="w-full text-left group p-4 rounded-[16px] bg-white border border-line/50 shadow-sm hover:shadow-md hover:border-accent/40 transition-all"
+                      >
+                        <div className="flex items-center justify-between mb-2.5">
+                          <span className="text-[14px] font-semibold text-ink group-hover:text-accent transition-colors truncate pr-4">
+                            {c.title}
+                          </span>
+                          <span className="text-[12px] font-bold text-muted group-hover:text-accent transition-colors">
+                            {c.progress}%
+                          </span>
+                        </div>
+                        <div className="w-full bg-line/60 rounded-full h-1.5 overflow-hidden shadow-inner">
+                          <div
+                            className="bg-accent h-1.5 rounded-full transition-all duration-700 ease-out"
+                            style={{ width: `${c.progress}%` }}
+                          />
+                        </div>
+                      </motion.button>
+                    ))}
+                  </AnimatePresence>
                 </div>
                 {/* View More Button */}
                 {courses.length > 3 && (
                   <button 
-                    onClick={() => router.push('/personal/courses')}
-                    className="w-full text-center mt-5 pt-4 border-t border-line/40 text-[13px] font-semibold text-muted hover:text-accent transition-colors"
+                    onClick={() => setShowAllCourses(!showAllCourses)}
+                    className="w-full flex flex-col items-center justify-center text-center mt-5 pt-4 border-t border-line/40 text-[13px] font-semibold text-muted hover:text-accent transition-colors"
                   >
-                    View all {courses.length} courses
+                    <div className="flex items-center gap-1">
+                      {showAllCourses ? "Show less" : `View all ${courses.length} courses`}
+                      {showAllCourses ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                    </div>
                   </button>
                 )}
               </>
@@ -828,7 +852,7 @@ export default function PersonalPage() {
                               router.push(`/personal/classroom/${t.reference_id}`);
                             }
                           }}
-                          className="group flex items-center justify-between p-4 rounded-[16px] bg-white/60 border border-white/80 shadow-[0_2px_8px_-4px_rgba(0,0,0,0.05)] backdrop-blur-md cursor-pointer hover:bg-white/90 hover:shadow-md hover:-translate-y-0.5 transition-all duration-300"
+                          className="group flex items-center justify-between p-4 rounded-[16px] bg-white border border-line/50 shadow-sm cursor-pointer hover:shadow-md hover:border-accent/30 hover:-translate-y-0.5 transition-all duration-300"
                         >
                           <div className="flex items-start gap-3.5">
                             <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 mt-0.5 transition-colors ${iconBg}`}>
