@@ -98,8 +98,6 @@ export default function PersonalPage() {
   const firstName = profile?.full_name?.split(" ")[0] ?? "there";
 
   const [courses, setCourses] = useState<EnrolledCourse[]>([]);
-  
-  // === UPDATE: Chuyển NextLesson và Classroom sang dạng Array ===
   const [nextLessons, setNextLessons] = useState<NextLesson[]>([]);
   const [classrooms, setClassrooms] = useState<ClassroomInfo[]>([]);
   const [totalClassrooms, setTotalClassrooms] = useState(0);
@@ -332,15 +330,18 @@ export default function PersonalPage() {
           { count: "exact" }
         )
         .eq("learner_id", user.id)
-        .eq("status", "active")
-        .order("created_at", { ascending: false });
+        .eq("status", "active");
+        // FIX: Đã xóa lệnh .order("created_at") gây lỗi ngầm ở đây
 
       if (!cancelled && membership) {
-        setTotalClassrooms(classCount ?? 0);
+        setTotalClassrooms(classCount ?? membership.length);
         const loadedClasses: ClassroomInfo[] = [];
 
-        for (let i = 0; i < membership.length; i++) {
-          const c: any = membership[i].classrooms;
+        // Đảo ngược mảng bằng JS để đẩy lớp mới nhất lên đầu thay vì dùng SQL Order
+        const reversed = [...membership].reverse();
+
+        for (let i = 0; i < reversed.length; i++) {
+          const c: any = reversed[i].classrooms;
           if (!c) continue;
 
           let latestPost = null;
@@ -574,7 +575,7 @@ export default function PersonalPage() {
               {/* View More Button */}
               {totalClassrooms > 2 && (
                 <button 
-                  onClick={() => router.push('/personal/classrooms')} // Tạo một trang danh sách các lớp sau nhé
+                  onClick={() => router.push('/personal/classrooms')}
                   className="w-full text-center mt-2 pt-4 border-t border-line/40 text-[13px] font-semibold text-muted hover:text-accent transition-colors"
                 >
                   View all {totalClassrooms} classes
@@ -703,7 +704,7 @@ export default function PersonalPage() {
                 {/* View More Button */}
                 {courses.length > 3 && (
                   <button 
-                    onClick={() => router.push('/personal/courses')} // Tạo trang ds khóa học sau nhé
+                    onClick={() => router.push('/personal/courses')}
                     className="w-full text-center mt-5 pt-4 border-t border-line/40 text-[13px] font-semibold text-muted hover:text-accent transition-colors"
                   >
                     View all {courses.length} courses
