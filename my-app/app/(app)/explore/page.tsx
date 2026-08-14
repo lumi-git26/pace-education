@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, useRef } from "react";
+import { useRouter } from "next/navigation";
 import { Search } from "lucide-react";
 import { supabase } from "@/lib/supabase/client";
 import CourseCard, { CourseCardData } from "@/components/CourseCard";
@@ -45,6 +46,8 @@ function pushRecentSearch(term: string) {
 }
 
 export default function ExplorePage() {
+  const router = useRouter();
+
   const [courses, setCourses] = useState<CourseCardData[]>([]);
   const [classrooms, setClassrooms] = useState<ClassroomData[]>([]);
   const [recentCourseIds, setRecentCourseIds] = useState<string[]>([]);
@@ -206,18 +209,18 @@ export default function ExplorePage() {
       );
 
       if (!cancelled) {
-              // Xử lý dữ liệu để chắc chắn profiles luôn là object chứ không phải array
-              const formattedClassrooms: ClassroomData[] = (classRows ?? []).map((c: any) => ({
-                id: c.id,
-                title: c.title,
-                subject_code: c.subject_code,
-                cohort_label: c.cohort_label,
-                profiles: Array.isArray(c.profiles) ? c.profiles[0] : c.profiles,
-              }));
+        // Đã sửa mảng profiles để TypeScript không báo lỗi nữa
+        const formattedClassrooms: ClassroomData[] = (classRows ?? []).map((c: any) => ({
+          id: c.id,
+          title: c.title,
+          subject_code: c.subject_code,
+          cohort_label: c.cohort_label,
+          profiles: Array.isArray(c.profiles) ? c.profiles[0] : c.profiles,
+        }));
 
-              setCourses(mappedCourses);
-              setClassrooms(formattedClassrooms);
-              setLoading(false);
+        setCourses(mappedCourses);
+        setClassrooms(formattedClassrooms);
+        setLoading(false);
       }
     }
 
@@ -479,7 +482,7 @@ export default function ExplorePage() {
               {!loading && !error && tab !== "classrooms" && visibleCourses.length > 0 && (
                 <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 items-start">
                   {visibleCourses.map((course) => (
-                    <CourseCard key={course.id} course={course} />
+                        <CourseCard key={course.id} course={course} />
                   ))}
                 </div>
               )}
@@ -490,6 +493,7 @@ export default function ExplorePage() {
                   {visibleClassrooms.map((c) => (
                     <div 
                       key={c.id} 
+                      onClick={() => router.push(`/classrooms/${c.id}`)}
                       className="rounded-[24px] bg-white/60 border border-white/80 shadow-[0_2px_10px_-4px_rgba(0,0,0,0.05)] backdrop-blur-md p-6 hover:bg-white/90 hover:shadow-md hover:-translate-y-1 transition-all cursor-pointer group"
                     >
                       <div className="flex items-start gap-4 mb-4">
