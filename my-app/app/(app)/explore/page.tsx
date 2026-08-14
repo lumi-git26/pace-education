@@ -82,26 +82,20 @@ export default function ExplorePage() {
   useEffect(() => {
     let cancelled = false;
 
-    async function fetchAll() {
+    async function fetchCourses() {
       setLoading(true);
       setError(null);
 
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-
-      const { data, error } = await supabase
+      const { data: courseRows, error: courseErr } = await supabase
         .from("courses")
-        .select(
-          "id, title, description, status, created_at, profiles(full_name), units(id, title, order_index, lessons(id, title, order_index, est_minutes, content))"
-        )
+        .select("id, title, description, status, created_at, profiles(full_name)")
         .eq("status", "published")
         .order("created_at", { ascending: false });
 
       if (cancelled) return;
 
-      if (error) {
-        setError(error.message);
+      if (courseErr) {
+        setError(courseErr.message);
         setCourses([]);
         setLoading(false);
         return;
@@ -115,10 +109,13 @@ export default function ExplorePage() {
       (enrollmentRows ?? []).forEach((row: any) => {
         countByCourse[row.course_id] = (countByCourse[row.course_id] ?? 0) + 1;
       });
-
       const counts = Object.values(countByCourse);
       const averageEnrollment =
         counts.length > 0 ? counts.reduce((a, b) => a + b, 0) / counts.length : 0;
+
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
 
       let recentIds: string[] = [];
       if (user) {
@@ -142,45 +139,51 @@ export default function ExplorePage() {
       }
       if (!cancelled) setRecentCourseIds(recentIds);
 
-      const mapped: CourseCardData[] = (data ?? []).map((row: any) => {
-        const sortedUnits = (row.units ?? [])
-          .slice()
-          .sort((a: any, b: any) => a.order_index - b.order_index)
-          .map((u: any) => ({
-            id: u.id,
-            title: u.title,
-            lessons: (u.lessons ?? [])
-              .slice()
-              .sort((a: any, b: any) => a.order_index - b.order_index)
-              .map((l: any) => ({
-                id: l.id,
-                title: l.title,
-                content: l.content,
-              })),
-          }));
+      // Fetch preview (title-only) unit/lesson data via the security-definer
+      // function, one course at a time, since it doesn't take an array param.
+      const mapped: CourseCardData[] = await Promise.all(
+        (courseRows ?? []).map(async (row: any) => {
+          const { data: previewRows } = await supabase.rpc("get_course_preview", {
+            p_course_id: row.id,
+          });
 
-        const allLessons = sortedUnits.flatMap((u: any) => u.lessons ?? []);
-        const totalMinutes = (row.units ?? [])
-          .flatMap((u: any) => u.lessons ?? [])
-          .reduce((sum: number, l: any) => sum + (l.est_minutes ?? 0), 0);
+          const unitsMap = new Map<string, any>();
+          (previewRows ?? []).forEach((r: any) => {
+            if (!unitsMap.has(r.unit_id)) {
+              unitsMap.set(r.unit_id, {
+                id: r.unit_id,
+                title: r.unit_title,
+                lessons: [],
+              });
+            }
+            unitsMap.get(r.unit_id).lessons.push({
+              id: r.lesson_id,
+              title: r.lesson_title,
+            });
+          });
+          const sortedUnits = Array.from(unitsMap.values());
+          const allLessons = sortedUnits.flatMap((u: any) => u.lessons);
 
-        const overviewText =
-          sortedUnits[0]?.lessons?.[0]?.content?.body ?? row.description ?? "";
+          const totalMinutes = (previewRows ?? []).reduce(
+            (sum: number, r: any) => sum + (r.est_minutes ?? 0),
+            0
+          );
 
-        const enrolledCount = countByCourse[row.id] ?? 0;
-
-        return {
-          id: row.id,
-          title: row.title,
-          description: overviewText,
-          publisherName: row.profiles?.full_name ?? "Unknown",
-          lessonCount: allLessons.length,
-          hoursToComplete: Math.round((totalMinutes / 60) * 10) / 10,
-          units: sortedUnits,
-          enrolledCount,
-          isHot: enrolledCount > averageEnrollment && enrolledCount > 0,
-        };
-      });
+          return {
+            id: row.id,
+            title: row.title,
+            description: row.description ?? "",
+            publisherName: row.profiles?.full_name ?? "Unknown",
+            lessonCount: allLessons.length,
+            hoursToComplete: Math.round((totalMinutes / 60) * 10) / 10,
+            units: sortedUnits,
+            enrolledCount: countByCourse[row.id] ?? 0,
+            isHot:
+              (countByCourse[row.id] ?? 0) > averageEnrollment &&
+              (countByCourse[row.id] ?? 0) > 0,
+          };
+        })
+      );
 
       if (!cancelled) {
         setCourses(mapped);
@@ -188,7 +191,7 @@ export default function ExplorePage() {
       }
     }
 
-    fetchAll();
+    fetchCourses();
     return () => {
       cancelled = true;
     };
@@ -381,11 +384,9 @@ export default function ExplorePage() {
         </div>
 
         <div className="min-h-[80vh]"> 
-          {/* ================= THAY ĐỔI Ở ĐÂY: ANIMATE PRESENCE ================= */}
           <AnimatePresence mode="wait">
             <motion.div
               key={tab}
-              // Trượt nhẹ lên trên (y: 10) và mờ dần giống như trang Schedule
               initial={{ opacity: 0, y: 15 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -15 }}
@@ -434,7 +435,6 @@ export default function ExplorePage() {
               )}
             </motion.div>
           </AnimatePresence>
-          {/* ==================================================================== */}
         </div>
       </div>
     </div>

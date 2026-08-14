@@ -3,8 +3,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Calendar as CalendarIcon, AlertCircle, Clock } from "lucide-react";
+import { X, Calendar as CalendarIcon } from "lucide-react";
 import { supabase } from "@/lib/supabase/client";
+import { generateCourseSchedule } from "@/lib/scheduling";
 
 const TIME_ROWS = [
   { key: "morning", label: "Morning" },
@@ -113,12 +114,6 @@ export default function PreferenceModal({
     return d;
   }, [lessonsPerWeek, totalLessons]);
 
-  // Kiểm tra xem learner có đang chọn số buổi học ít hơn đề xuất không
-  const isFallingBehind = useMemo(() => {
-    if (suggestedLessonsPerWeek === null || lessonsPerWeek === null) return false;
-    return lessonsPerWeek < suggestedLessonsPerWeek;
-  }, [suggestedLessonsPerWeek, lessonsPerWeek]);
-
   function toggleSlot(day: number, time: string) {
     const key = slotKey(day, time);
     setSelectedSlots((prev) => {
@@ -155,22 +150,38 @@ export default function PreferenceModal({
       return { day: Number(day), time };
     });
 
+    // Fall back to 1 lesson/week if no deadline was set, so a schedule
+    // still gets generated from whatever days/times were picked.
+    const effectiveLessonsPerWeek =
+      lessonsPerWeek ?? Math.max(1, distinctDays.size);
+
     const { error } = await supabase.from("schedule_preferences").insert({
       learner_id: user.id,
       course_id: courseId,
       availability,
       target_date: hasDeadline && targetDate ? targetDate : null,
-      lessons_per_week: lessonsPerWeek,
+      lessons_per_week: effectiveLessonsPerWeek,
     });
-
-    setSaving(false);
 
     if (error) {
       setError(error.message);
+      setSaving(false);
       return;
     }
 
+    await generateCourseSchedule(
+      user.id,
+      courseId,
+      availability,
+      effectiveLessonsPerWeek
+    );
+
+    setSaving(false);
     onSaved?.();
+    onClose();
+  }
+
+  function handleSkip() {
     onClose();
   }
 
@@ -182,45 +193,41 @@ export default function PreferenceModal({
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
-        className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/40 backdrop-blur-md p-4"
-        onClick={onClose}
+        className="fixed inset-0 z-[9999] flex items-center justify-center bg-ink/40 backdrop-blur-sm p-4"
+        onClick={handleSkip}
       >
         <motion.div
-          initial={{ opacity: 0, y: 20, scale: 0.96 }}
+          initial={{ opacity: 0, y: 16, scale: 0.97 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
-          exit={{ opacity: 0, y: 16, scale: 0.96 }}
-          transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
+          exit={{ opacity: 0, y: 12, scale: 0.98 }}
+          transition={{ duration: 0.2, ease: "easeOut" }}
           onClick={(e: React.MouseEvent) => e.stopPropagation()}
-          className="relative w-full max-w-lg rounded-[32px] border border-white/40 bg-white/80 p-8 shadow-[0_24px_40px_-12px_rgba(0,0,0,0.1)] backdrop-blur-2xl max-h-[85vh] overflow-y-auto overflow-x-hidden custom-scrollbar"
+          className="relative w-full max-w-lg rounded-[28px] bg-paper shadow-2xl p-7 max-h-[85vh] overflow-y-auto"
         >
-          {/* Header */}
-          <div className="mb-8 flex items-start justify-between">
-            <div>
-              <h2 className="font-serif text-2xl font-bold tracking-tight text-slate-800">
-                Study Schedule
-              </h2>
-              <p className="mt-1.5 text-sm text-slate-500">
-                Tap the times that work for you. We'll build a pace that fits your life.
-              </p>
-            </div>
-            <button
-              onClick={onClose}
-              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-400 transition-colors hover:bg-slate-200 hover:text-slate-600"
-            >
-              <X size={16} strokeWidth={2.5} />
-            </button>
-          </div>
+          <button
+            onClick={handleSkip}
+            className="absolute top-5 right-5 flex h-8 w-8 items-center justify-center rounded-full text-muted hover:bg-ink/5 hover:text-ink transition-colors"
+            aria-label="Close"
+          >
+            <X size={16} />
+          </button>
 
-          {/* Time Slot Grid */}
-          <div className="mb-8 overflow-x-auto pb-2">
-            <table className="w-full min-w-[420px] border-separate border-spacing-2">
+          <h2 className="font-serif text-2xl font-bold text-ink mb-1">
+            When do you want to study?
+          </h2>
+          <p className="text-sm text-muted mb-6">
+            Tap the times that work for you. You can change this anytime.
+          </p>
+
+          <div className="mb-6 overflow-x-auto">
+            <table className="w-full border-separate border-spacing-1.5 min-w-[420px]">
               <thead>
                 <tr>
-                  <th className="w-16"></th>
+                  <th className="w-16" />
                   {DAY_COLS.map((d) => (
                     <th
                       key={d.key}
-                      className="pb-2 text-[10px] font-bold uppercase tracking-wider text-slate-400"
+                      className="text-[10px] font-bold text-muted uppercase pb-1"
                     >
                       {d.label}
                     </th>
@@ -230,7 +237,7 @@ export default function PreferenceModal({
               <tbody>
                 {TIME_ROWS.map((row) => (
                   <tr key={row.key}>
-                    <td className="pr-3 text-right text-xs font-medium text-slate-400 whitespace-nowrap">
+                    <td className="text-xs font-medium text-ink/70 pr-2 whitespace-nowrap">
                       {row.label}
                     </td>
                     {DAY_COLS.map((d) => {
@@ -240,11 +247,12 @@ export default function PreferenceModal({
                           <button
                             onClick={() => toggleSlot(d.key, row.key)}
                             aria-label={`${row.label} ${d.label}`}
-                            className={`w-full aspect-square rounded-xl transition-all duration-200 ${
+                            className={[
+                              "w-full aspect-square rounded-lg transition-colors border",
                               active
-                                ? "bg-teal-500 shadow-[0_0_12px_rgba(20,184,166,0.3)] ring-2 ring-teal-500 ring-offset-2 ring-offset-white"
-                                : "bg-slate-100 hover:bg-slate-200"
-                            }`}
+                                ? "bg-accent border-accent"
+                                : "bg-white/60 border-line/60 hover:bg-ink/5",
+                            ].join(" ")}
                           />
                         </td>
                       );
@@ -255,149 +263,94 @@ export default function PreferenceModal({
             </table>
           </div>
 
-          <hr className="mb-6 border-slate-200/60" />
-
-          {/* Deadline Toggle */}
-          <label className="group flex cursor-pointer items-center justify-between rounded-2xl border border-slate-200/60 bg-white/50 p-4 transition-colors hover:bg-white/80">
-            <div className="flex items-center gap-3">
-              <div className={`flex h-10 w-10 items-center justify-center rounded-xl transition-colors ${hasDeadline ? 'bg-teal-50 text-teal-600' : 'bg-slate-50 text-slate-400'}`}>
-                <Clock size={20} />
-              </div>
-              <span className="text-sm font-semibold text-slate-700">
-                I have a specific deadline
-              </span>
-            </div>
-            <div className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${hasDeadline ? 'bg-teal-500' : 'bg-slate-200'}`}>
-              <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${hasDeadline ? 'translate-x-6' : 'translate-x-1'}`} />
+          <div className="mb-3">
+            <label className="flex items-center gap-2.5 text-sm font-medium text-ink cursor-pointer">
               <input
                 type="checkbox"
-                className="hidden"
                 checked={hasDeadline}
                 onChange={(e) => setHasDeadline(e.target.checked)}
+                className="rounded"
               />
-            </div>
-          </label>
+              I have a deadline for this course
+            </label>
+          </div>
 
-          {/* Deadline Configuration */}
-          <AnimatePresence>
-            {hasDeadline && (
-              <motion.div
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: "auto" }}
-                exit={{ opacity: 0, height: 0 }}
-                className="overflow-hidden"
-              >
-                <div className="mt-4 space-y-4">
-                  
-                  {/* Date Picker */}
-                  <div className="relative">
+          {hasDeadline && (
+            <div className="mb-6 space-y-4">
+              <div className="relative">
+                <input
+                  type="date"
+                  value={targetDate}
+                  min={new Date().toISOString().slice(0, 10)}
+                  onChange={(e) => setTargetDate(e.target.value)}
+                  className="w-full rounded-xl border border-line px-4 py-2.5 text-sm outline-none focus:border-accent"
+                />
+                <CalendarIcon
+                  size={16}
+                  className="absolute right-4 top-1/2 -translate-y-1/2 text-muted pointer-events-none"
+                />
+              </div>
+
+              {distinctDays.size === 0 && (
+                <p className="text-xs text-muted">
+                  Select at least one time slot to see a suggested pace.
+                </p>
+              )}
+
+              {suggestedLessonsPerWeek != null && (
+                <div className="rounded-2xl bg-accent/10 p-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-xs font-medium text-ink">
+                      Lessons per week
+                    </p>
                     <input
-                      type="date"
-                      value={targetDate}
-                      min={new Date().toISOString().slice(0, 10)}
-                      onChange={(e) => setTargetDate(e.target.value)}
-                      className="w-full appearance-none rounded-xl border border-slate-200 bg-white/60 px-4 py-3 text-sm font-medium text-slate-700 outline-none transition-all focus:border-teal-400 focus:bg-white focus:ring-4 focus:ring-teal-400/10"
-                    />
-                    <CalendarIcon
-                      size={18}
-                      className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"
+                      type="number"
+                      min={1}
+                      max={distinctDays.size}
+                      value={lessonsPerWeek ?? suggestedLessonsPerWeek}
+                      onChange={(e) =>
+                        setLessonsPerWeek(
+                          Math.max(
+                            1,
+                            Math.min(distinctDays.size, Number(e.target.value))
+                          )
+                        )
+                      }
+                      className="w-16 rounded-lg border border-line px-2 py-1 text-sm text-center outline-none focus:border-accent"
                     />
                   </div>
-
-                  {distinctDays.size === 0 && (
-                    <p className="text-xs font-medium text-amber-600 bg-amber-50 rounded-lg p-3">
-                      Please select at least one time slot above to see your pacing.
+                  {estimatedCompletionDate && (
+                    <p className="text-xs text-muted">
+                      Estimated completion:{" "}
+                      <span className="font-medium text-ink">
+                        {estimatedCompletionDate.toLocaleDateString("en-US", {
+                          month: "long",
+                          day: "numeric",
+                          year: "numeric",
+                        })}
+                      </span>
                     </p>
                   )}
-
-                  {suggestedLessonsPerWeek != null && (
-                    <div className="rounded-2xl border border-slate-200/60 bg-slate-50/50 p-5">
-                      <div className="flex items-center justify-between mb-4">
-                        <div>
-                          <p className="text-sm font-semibold text-slate-700">
-                            Pacing target
-                          </p>
-                          <p className="text-xs text-slate-500">
-                            Lessons per week to hit your goal
-                          </p>
-                        </div>
-                        <input
-                          type="number"
-                          min={1}
-                          max={distinctDays.size}
-                          value={lessonsPerWeek ?? suggestedLessonsPerWeek}
-                          onChange={(e) =>
-                            setLessonsPerWeek(
-                              Math.max(
-                                1,
-                                Math.min(distinctDays.size, Number(e.target.value))
-                              )
-                            )
-                          }
-                          className="w-16 rounded-xl border border-slate-200 bg-white px-2 py-2 text-center text-sm font-bold text-slate-700 outline-none transition-all focus:border-teal-400 focus:ring-2 focus:ring-teal-400/20"
-                        />
-                      </div>
-
-                      {/* Warning if falling behind */}
-                      {isFallingBehind && (
-                        <motion.div 
-                          initial={{ opacity: 0, y: -5 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          className="mb-4 flex items-start gap-2.5 rounded-xl bg-orange-50 border border-orange-100 p-3"
-                        >
-                          <AlertCircle size={16} className="mt-0.5 shrink-0 text-orange-500" />
-                          <p className="text-xs font-medium leading-relaxed text-orange-700">
-                            With this pace, you might fall short of completing all {totalLessons} lessons by your deadline. Consider adding more slots!
-                          </p>
-                        </motion.div>
-                      )}
-
-                      {estimatedCompletionDate && (
-                        <div className="flex items-center gap-2 rounded-xl bg-white p-3 shadow-sm border border-slate-100">
-                          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-teal-50 text-teal-600">
-                            <CalendarIcon size={14} />
-                          </div>
-                          <div>
-                            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                              Estimated Finish
-                            </p>
-                            <p className="text-xs font-bold text-slate-700">
-                              {estimatedCompletionDate.toLocaleDateString("en-US", {
-                                month: "long",
-                                day: "numeric",
-                                year: "numeric",
-                              })}
-                            </p>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  )}
                 </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-
-          {error && (
-            <p className="mt-4 text-center text-sm font-medium text-red-500">
-              {error}
-            </p>
+              )}
+            </div>
           )}
 
-          {/* Action Buttons */}
-          <div className="mt-8 flex gap-3">
+          {error && <p className="text-sm text-red-600 mb-4">{error}</p>}
+
+          <div className="flex gap-3">
             <button
-              onClick={onClose}
-              className="flex-1 rounded-2xl bg-slate-100 py-3.5 text-sm font-bold text-slate-500 transition-colors hover:bg-slate-200 hover:text-slate-700"
+              onClick={handleSkip}
+              className="flex-1 rounded-pill border border-line py-3 text-sm font-medium text-muted hover:bg-ink/5 transition-colors"
             >
-              Skip
+              Skip for now
             </button>
             <button
               onClick={handleSave}
               disabled={saving}
-              className="flex-[2] rounded-2xl bg-slate-900 py-3.5 text-sm font-bold text-white shadow-lg shadow-slate-900/20 transition-all hover:bg-slate-800 hover:shadow-xl hover:-translate-y-0.5 disabled:opacity-60 disabled:hover:translate-y-0"
+              className="flex-1 rounded-pill bg-ink text-white py-3 text-sm font-medium hover:bg-ink/80 transition-colors disabled:opacity-60"
             >
-              {saving ? "Saving…" : "Save Preferences"}
+              {saving ? "Saving…" : "Save"}
             </button>
           </div>
         </motion.div>
