@@ -6,16 +6,25 @@ import { supabase } from "@/lib/supabase/client";
 import CourseCard, { CourseCardData } from "@/components/CourseCard";
 import { motion, AnimatePresence } from "framer-motion";
 
-type Tab = "recent" | "recommend" | "trending";
+type Tab = "recent" | "recommend" | "trending" | "classrooms";
 
 const TABS: { key: Tab; label: string }[] = [
   { key: "recent", label: "Recent" },
   { key: "recommend", label: "Recommend" },
   { key: "trending", label: "Trending" },
+  { key: "classrooms", label: "Classrooms" },
 ];
 
 const LEARNING_TOPICS = ["IELTS", "Finance", "English", "Spanish", "Data Analysis"];
 const SEARCH_HISTORY_KEY = "pace_recent_searches";
+
+type ClassroomData = {
+  id: string;
+  title: string;
+  subject_code: string | null;
+  cohort_label: string | null;
+  profiles: { full_name: string } | null;
+};
 
 function getRecentSearches(): string[] {
   if (typeof window === "undefined") return [];
@@ -37,6 +46,7 @@ function pushRecentSearch(term: string) {
 
 export default function ExplorePage() {
   const [courses, setCourses] = useState<CourseCardData[]>([]);
+  const [classrooms, setClassrooms] = useState<ClassroomData[]>([]);
   const [recentCourseIds, setRecentCourseIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -51,6 +61,7 @@ export default function ExplorePage() {
   const [topicIndex, setTopicIndex] = useState(0);
   const [typingSpeed, setTypingSpeed] = useState(100);
 
+  // Hiệu ứng Typing
   useEffect(() => {
     let timer: NodeJS.Timeout;
     const fullText = LEARNING_TOPICS[topicIndex];
@@ -79,13 +90,15 @@ export default function ExplorePage() {
     return () => clearTimeout(timer);
   }, [text, isDeleting, topicIndex, typingSpeed]);
 
+  // Data Fetching
   useEffect(() => {
     let cancelled = false;
 
-    async function fetchCourses() {
+    async function fetchData() {
       setLoading(true);
       setError(null);
 
+      // 1. Lấy dữ liệu Courses
       const { data: courseRows, error: courseErr } = await supabase
         .from("courses")
         .select("id, title, description, status, created_at, profiles(full_name)")
@@ -97,10 +110,17 @@ export default function ExplorePage() {
       if (courseErr) {
         setError(courseErr.message);
         setCourses([]);
+        setClassrooms([]);
         setLoading(false);
         return;
       }
 
+      // 2. Lấy dữ liệu Classrooms
+      const { data: classRows } = await supabase
+        .from("classrooms")
+        .select("id, title, subject_code, cohort_label, profiles(full_name)");
+
+      // Tính toán thông tin Enrollments (Độ Hot)
       const { data: enrollmentRows } = await supabase
         .from("enrollments")
         .select("course_id");
@@ -113,6 +133,7 @@ export default function ExplorePage() {
       const averageEnrollment =
         counts.length > 0 ? counts.reduce((a, b) => a + b, 0) / counts.length : 0;
 
+      // Lịch sử xem (Recent)
       const {
         data: { user },
       } = await supabase.auth.getUser();
@@ -139,9 +160,8 @@ export default function ExplorePage() {
       }
       if (!cancelled) setRecentCourseIds(recentIds);
 
-      // Fetch preview (title-only) unit/lesson data via the security-definer
-      // function, one course at a time, since it doesn't take an array param.
-      const mapped: CourseCardData[] = await Promise.all(
+      // RPC Preview cho Courses
+      const mappedCourses: CourseCardData[] = await Promise.all(
         (courseRows ?? []).map(async (row: any) => {
           const { data: previewRows } = await supabase.rpc("get_course_preview", {
             p_course_id: row.id,
@@ -186,17 +206,28 @@ export default function ExplorePage() {
       );
 
       if (!cancelled) {
-        setCourses(mapped);
-        setLoading(false);
+              // Xử lý dữ liệu để chắc chắn profiles luôn là object chứ không phải array
+              const formattedClassrooms: ClassroomData[] = (classRows ?? []).map((c: any) => ({
+                id: c.id,
+                title: c.title,
+                subject_code: c.subject_code,
+                cohort_label: c.cohort_label,
+                profiles: Array.isArray(c.profiles) ? c.profiles[0] : c.profiles,
+              }));
+
+              setCourses(mappedCourses);
+              setClassrooms(formattedClassrooms);
+              setLoading(false);
       }
     }
 
-    fetchCourses();
+    fetchData();
     return () => {
       cancelled = true;
     };
   }, []);
 
+  // Xử lý thanh tìm kiếm dính (sticky)
   useEffect(() => {
     const observer = new IntersectionObserver(
       ([entry]) => {
@@ -212,7 +243,8 @@ export default function ExplorePage() {
     pushRecentSearch(query);
   }
 
-  const visible = useMemo(() => {
+  // Lọc dữ liệu Khóa học
+  const visibleCourses = useMemo(() => {
     let list = courses.filter((c) =>
       c.title.toLowerCase().includes(query.toLowerCase())
     );
@@ -250,13 +282,22 @@ export default function ExplorePage() {
     return list;
   }, [courses, query, tab, recentCourseIds]);
 
+  // Lọc dữ liệu Lớp học
+  const visibleClassrooms = useMemo(() => {
+    return classrooms.filter(
+      (c) =>
+        c.title.toLowerCase().includes(query.toLowerCase()) ||
+        (c.subject_code && c.subject_code.toLowerCase().includes(query.toLowerCase()))
+    );
+  }, [classrooms, query]);
+
   function renderSearchInput(size: "large" | "small") {
     return (
       <>
         <input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Tìm kiếm khóa học..."
+          placeholder="Tìm kiếm khóa học hoặc lớp học..."
           className={`w-full rounded-pill border border-line bg-white/60 backdrop-blur-xl text-ink outline-none placeholder:text-muted focus:border-accent shadow-sm transition-all hover:shadow-md ${
             size === "large" ? "py-4 pl-8 pr-16 text-lg" : "py-2.5 pl-5 pr-12 text-sm"
           }`}
@@ -276,6 +317,7 @@ export default function ExplorePage() {
 
   return (
     <div className="relative w-full min-h-screen">
+      {/* Background Decorators */}
       <div
         className="fixed inset-0 -z-30 pointer-events-none bg-[#F9F9F8]"
         style={{
@@ -283,19 +325,18 @@ export default function ExplorePage() {
           backgroundSize: "36px 36px",
         }}
       />
-
       <div className="fixed inset-0 -z-10 overflow-hidden pointer-events-none mix-blend-multiply opacity-[0.35]">
         <div className="absolute top-[10%] right-[10%] w-[50%] h-[50%] bg-[#F2994A]/30 blur-[150px] rounded-full" />
         <div className="absolute bottom-[20%] left-[10%] w-[40%] h-[50%] bg-[#C9A6E0]/30 blur-[150px] rounded-full" />
       </div>
 
+      {/* Sticky Top Nav (khi cuộn) */}
       <div
         className={`fixed top-0 left-0 w-full z-50 flex items-center justify-between px-8 pb-4 pt-6 bg-[#F9F9F8]/60 backdrop-blur-xl transition-all duration-300 ${
           isScrolled ? "border-b border-line/50 shadow-sm" : "border-b border-transparent"
         }`}
       >
         <div />
-
         <div className="h-10 w-80 mr-4 md:mr-10 flex items-center justify-end">
           <AnimatePresence>
             {isScrolled && (
@@ -321,15 +362,14 @@ export default function ExplorePage() {
         </div>
       </div>
 
+      {/* Hero Section */}
       <div className="absolute top-[40vh] left-1/2 -translate-x-1/2 -translate-y-1/2 w-full px-4 flex flex-col items-center z-20 max-w-5xl">
         <h1 className="font-serif text-[26px] xs:text-[32px] sm:text-[40px] md:text-[54px] font-semibold text-ink flex flex-row items-center justify-center mb-8 w-full leading-tight whitespace-nowrap">
           <span>Today, I want to learn</span>
-
           <div className="inline-grid items-center text-accent ml-2 md:ml-3 text-left overflow-visible">
             <span className="col-start-1 row-start-1 opacity-0 pointer-events-none pr-1">
               English
             </span>
-
             <span className="col-start-1 row-start-1 flex items-center">
               {text}
               <motion.span
@@ -354,6 +394,7 @@ export default function ExplorePage() {
         </div>
       </div>
 
+      {/* Main Content (Tabs + Grid) */}
       <div className="relative z-10 pt-[88vh] px-6 w-full max-w-[1200px] mx-auto pb-32">
         <div className="sticky top-[80px] z-40 bg-[#F9F9F8]/90 backdrop-blur-md pt-4 pb-0 mb-8 -mx-6 px-6 border-b border-line/80">
           <div className="flex items-center gap-10 pb-3">
@@ -392,6 +433,7 @@ export default function ExplorePage() {
               exit={{ opacity: 0, y: -15 }}
               transition={{ duration: 0.2, ease: "easeOut" }}
             >
+              {/* === Skeleton Loading === */}
               {loading && (
                 <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
                   {[...Array(6)].map((_, i) => (
@@ -403,36 +445,96 @@ export default function ExplorePage() {
                 </div>
               )}
 
+              {/* === Error State === */}
               {!loading && error && (
                 <div className="rounded-[32px] border border-line bg-white/80 backdrop-blur-md p-14 text-center text-sm text-muted shadow-sm">
-                  <p className="text-xl mb-3 text-ink font-medium">Couldn&apos;t load courses</p>
+                  <p className="text-xl mb-3 text-ink font-medium">Couldn&apos;t load data</p>
                   {error}
                 </div>
               )}
 
-              {!loading && !error && visible.length === 0 && (
+              {/* === Empty State (Courses) === */}
+              {!loading && !error && tab !== "classrooms" && visibleCourses.length === 0 && (
                 <div className="rounded-[32px] border border-line bg-white/80 backdrop-blur-md p-14 text-center text-sm text-muted shadow-sm">
                   <p className="text-xl mb-3 text-ink font-medium">
                     {tab === "recent" && "No recent activity 🌱"}
                     {tab === "recommend" && "Nothing to recommend yet 🌱"}
                     {tab === "trending" && "Nothing trending yet 🌱"}
                   </p>
-                  {tab === "recent" &&
-                    "Courses you preview in the last 7 days will show up here."}
-                  {tab === "recommend" &&
-                    "Search for a topic, and we'll recommend related courses."}
-                  {tab === "trending" &&
-                    "Trending courses appear once enrollment picks up."}
+                  {tab === "recent" && "Courses you preview in the last 7 days will show up here."}
+                  {tab === "recommend" && "Search for a topic, and we'll recommend related courses."}
+                  {tab === "trending" && "Trending courses appear once enrollment picks up."}
                 </div>
               )}
 
-              {!loading && !error && visible.length > 0 && (
+              {/* === Empty State (Classrooms) === */}
+              {!loading && !error && tab === "classrooms" && visibleClassrooms.length === 0 && (
+                <div className="rounded-[32px] border border-line bg-white/80 backdrop-blur-md p-14 text-center text-sm text-muted shadow-sm">
+                  <p className="text-xl mb-3 text-ink font-medium">No classrooms found 🌱</p>
+                  Try searching for a different subject or cohort.
+                </div>
+              )}
+
+              {/* === Grid View (Courses) === */}
+              {!loading && !error && tab !== "classrooms" && visibleCourses.length > 0 && (
                 <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 items-start">
-                  {visible.map((course) => (
+                  {visibleCourses.map((course) => (
                     <CourseCard key={course.id} course={course} />
                   ))}
                 </div>
               )}
+
+              {/* === Grid View (Classrooms) === */}
+              {!loading && !error && tab === "classrooms" && visibleClassrooms.length > 0 && (
+                <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 items-start">
+                  {visibleClassrooms.map((c) => (
+                    <div 
+                      key={c.id} 
+                      className="rounded-[24px] bg-white/60 border border-white/80 shadow-[0_2px_10px_-4px_rgba(0,0,0,0.05)] backdrop-blur-md p-6 hover:bg-white/90 hover:shadow-md hover:-translate-y-1 transition-all cursor-pointer group"
+                    >
+                      <div className="flex items-start gap-4 mb-4">
+                        <div className="w-12 h-12 rounded-[14px] bg-gradient-to-br from-indigo-500 to-purple-600 text-white flex items-center justify-center shadow-sm shrink-0">
+                          <span className="font-serif font-bold text-lg">
+                            {c.subject_code?.slice(0, 2).toUpperCase() ?? "CL"}
+                          </span>
+                        </div>
+                        <div>
+                          {c.subject_code && (
+                            <p className="text-[10px] font-bold text-indigo-600 uppercase tracking-wider mb-1">
+                              {c.subject_code}
+                            </p>
+                          )}
+                          <p className="text-[16px] font-semibold text-ink leading-tight group-hover:text-accent transition-colors">
+                            {c.title}
+                          </p>
+                        </div>
+                      </div>
+                      
+                      <div className="flex items-center justify-between pt-4 border-t border-line/50">
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-7 h-7 rounded-full bg-ink/10 flex items-center justify-center text-[10px] font-bold text-ink/70">
+                            {c.profiles?.full_name?.charAt(0) ?? "I"}
+                          </div>
+                          <div>
+                            <p className="text-[9px] text-muted uppercase tracking-wider font-bold mb-0.5">
+                              Lecturer
+                            </p>
+                            <p className="text-[12px] font-semibold text-ink">
+                              {c.profiles?.full_name ?? "Instructor"}
+                            </p>
+                          </div>
+                        </div>
+                        {c.cohort_label && (
+                          <span className="bg-indigo-50 text-indigo-700 text-[10px] font-bold uppercase tracking-widest px-2.5 py-1 rounded-full">
+                            {c.cohort_label}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
             </motion.div>
           </AnimatePresence>
         </div>
