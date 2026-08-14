@@ -23,7 +23,6 @@ export default function ClassroomDetailPage() {
   const [classroom, setClassroom] = useState<ClassroomDetail | null>(null);
   const [loading, setLoading] = useState(true);
   
-  // Trạng thái đăng ký
   const [isEnrolled, setIsEnrolled] = useState(false);
   const [enrolling, setEnrolling] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -34,12 +33,11 @@ export default function ClassroomDetailPage() {
       
       const { data: { user } } = await supabase.auth.getUser();
 
-      // 1. Lấy thông tin chi tiết của lớp học
-        const { data: classData, error: classErr } = await supabase
-          .from("classrooms")
-          .select("id, title, subject_code, cohort_label, schedule_summary, profiles(full_name)") // THÊM Ở ĐÂY
-          .eq("id", classId)
-          .single();
+      const { data: classData, error: classErr } = await supabase
+        .from("classrooms")
+        .select("id, title, subject_code, cohort_label, schedule_summary, profiles(full_name)")
+        .eq("id", classId)
+        .single();
 
       if (classErr) {
         setError("Classroom not found.");
@@ -47,7 +45,6 @@ export default function ClassroomDetailPage() {
         return;
       }
 
-      // Format lại dữ liệu profiles phòng trường hợp nó trả về Array
       const formattedClass = {
         ...classData,
         profiles: Array.isArray(classData.profiles) ? classData.profiles[0] : classData.profiles,
@@ -55,7 +52,6 @@ export default function ClassroomDetailPage() {
       
       setClassroom(formattedClass);
 
-      // 2. Kiểm tra xem học sinh này đã tham gia lớp chưa
       if (user) {
         const { data: membership } = await supabase
           .from("classroom_members")
@@ -81,11 +77,10 @@ export default function ClassroomDetailPage() {
     const { data: { user } } = await supabase.auth.getUser();
 
     if (!user) {
-      router.push("/login"); // Hoặc trang auth của cậu
+      router.push("/login");
       return;
     }
 
-    // Insert học sinh vào bảng classroom_members
     const { error: insertErr } = await supabase
       .from("classroom_members")
       .insert({
@@ -103,7 +98,6 @@ export default function ClassroomDetailPage() {
     setIsEnrolled(true);
     setEnrolling(false);
     
-    // Tùy chọn: Đẩy học sinh về trang Personal sau khi đăng ký thành công
     setTimeout(() => {
       router.push("/personal");
     }, 1500);
@@ -134,7 +128,6 @@ export default function ClassroomDetailPage() {
 
   return (
     <div className="relative min-h-screen w-full px-6 py-12 md:py-20 lg:px-16 overflow-x-hidden">
-      {/* Background Decorators */}
       <div
         className="fixed inset-0 -z-30 pointer-events-none bg-[#F9F9F8]"
         style={{
@@ -148,7 +141,6 @@ export default function ClassroomDetailPage() {
       </div>
 
       <div className="max-w-[800px] mx-auto">
-        {/* Nút Back */}
         <button
           onClick={() => router.back()}
           className="flex items-center gap-2 text-sm font-bold text-muted hover:text-ink transition-colors mb-8"
@@ -161,7 +153,6 @@ export default function ClassroomDetailPage() {
           animate={{ opacity: 1, y: 0 }}
           className="rounded-[32px] bg-white/60 backdrop-blur-xl border border-white/80 shadow-[0_8px_30px_rgb(0,0,0,0.04)] p-8 md:p-12"
         >
-          {/* Header Lớp học */}
           <div className="flex flex-col md:flex-row md:items-start justify-between gap-8 mb-12 border-b border-line/60 pb-12">
             <div>
               <div className="flex items-center gap-3 mb-4">
@@ -177,30 +168,34 @@ export default function ClassroomDetailPage() {
                 )}
               </div>
               
-              <h1 className="font-serif text-[32px] md:text-[40px] font-bold text-ink leading-tight mb-4">
+              <h1 className="font-serif text-[32px] md:text-[40px] font-bold text-ink leading-tight mb-6">
                 {classroom.title}
               </h1>
               
-              <div className="flex items-center gap-2.5 text-muted">
-                <div className="w-8 h-8 rounded-full bg-ink/10 flex items-center justify-center text-[12px] font-bold text-ink/70">
-                  {classroom.profiles?.full_name?.charAt(0) ?? "I"}
+              {/* === BỐ CỤC THÔNG TIN LỚP HỌC MỚI === */}
+              <div className="flex flex-col gap-4">
+                <div className="flex items-center gap-3 text-muted">
+                  <div className="w-9 h-9 rounded-full bg-ink/10 flex items-center justify-center text-[12px] font-bold text-ink/70">
+                    {classroom.profiles?.full_name?.charAt(0) ?? "I"}
+                  </div>
+                  <p className="text-[15px] font-medium">
+                    Led by <span className="font-bold text-ink">{classroom.profiles?.full_name ?? "Instructor"}</span>
+                  </p>
                 </div>
-                <p className="text-sm font-medium">
-                  Led by <span className="font-bold text-ink">{classroom.profiles?.full_name ?? "Instructor"}</span>
-                </p>
-                {/* Hiển thị Lịch học bằng Text */}
-                  {classroom.schedule_summary && (
-                    <div className="flex items-center gap-2 mt-4 px-4 py-2.5 bg-[#F9F9F8] rounded-xl border border-dashed border-line/80 w-fit">
-                      <Calendar size={14} className="text-orange-500" />
-                      <span className="text-[13px] font-medium text-ink/80">
-                        {classroom.schedule_summary}
-                      </span>
-                    </div>
-                  )}
+
+                {/* Khung lịch nét đứt nằm dưới tên giảng viên */}
+                {classroom.schedule_summary && (
+                  <div className="flex items-center gap-2 mt-1 px-4 py-2.5 bg-[#F9F9F8] rounded-xl border border-dashed border-line/80 w-fit">
+                    <Calendar size={14} className="text-orange-500" />
+                    <span className="text-[13px] font-medium text-ink/80">
+                      {classroom.schedule_summary}
+                    </span>
+                  </div>
+                )}
               </div>
+              {/* ================================== */}
             </div>
 
-            {/* Khối Đăng ký */}
             <div className="w-full md:w-[260px] shrink-0 bg-white/80 rounded-[24px] p-6 shadow-sm border border-white">
               {isEnrolled ? (
                 <div className="flex flex-col items-center text-center">
@@ -238,7 +233,6 @@ export default function ClassroomDetailPage() {
             </div>
           </div>
 
-          {/* About / Features Section */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
             <div className="p-5 rounded-2xl bg-[#F9F9F8] border border-dashed border-line/80">
               <BookOpen size={20} className="text-indigo-500 mb-3" />

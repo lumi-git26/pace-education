@@ -673,7 +673,7 @@ export default function PersonalPage() {
         {/* ============ RIGHT COLUMN ============ */}
         <div className="space-y-6">
           
-          {/* ================= SCHEDULE WIDGET MỚI ================= */}
+          {/* ================= SCHEDULE WIDGET ================= */}
           <div className="rounded-[20px] bg-white/60 backdrop-blur-xl border border-white/60 shadow-sm p-6">
             <div className="flex items-center gap-2 text-sm font-bold text-ink mb-5">
               <CalendarIcon size={16} /> Schedule
@@ -688,9 +688,6 @@ export default function PersonalPage() {
                     const hasTasks = (tasksByDay[dayKey]?.length ?? 0) > 0;
                     const hasPastActivity = activeDays.has(dayKey);
                     
-                    // ============================================
-                    // UPDATE: Bắt thứ 7 và CN để hiện màu đỏ
-                    // ============================================
                     const isWeekend = d.getDay() === 0 || d.getDay() === 6;
 
                     return (
@@ -701,14 +698,21 @@ export default function PersonalPage() {
                           "relative flex flex-col items-center gap-1 rounded-xl py-2.5 text-center transition-colors duration-200 cursor-pointer",
                           isSelected
                             ? "bg-ink text-white shadow-sm"
-                            : "hover:bg-white/60",
-                          !isSelected && isWeekend ? "text-red-500/90" : !isSelected ? "text-ink/70" : ""
+                            : "hover:bg-white/60 text-ink/70" // Đã xóa text-red-500 ở thẻ cha
                         ].join(" ")}
                       >
-                        <span className={`text-[10px] uppercase font-semibold ${isSelected ? 'opacity-90' : 'opacity-70'}`}>
+                        {/* Chỉ in đỏ chữ cái ngày cuối tuần (nếu chưa chọn) */}
+                        <span className={`text-[10px] uppercase font-semibold ${
+                          isSelected 
+                            ? 'opacity-90' 
+                            : isWeekend 
+                              ? 'text-red-500 opacity-100' 
+                              : 'opacity-70'
+                        }`}>
                           {d.toLocaleDateString("en-US", { weekday: "short" }).charAt(0)}
                         </span>
                         <span className="text-[14px] font-bold">{d.getDate()}</span>
+                        
                         {(hasTasks || hasPastActivity) && (
                           <span
                             className={[
@@ -747,10 +751,6 @@ export default function PersonalPage() {
                   {selectedDate &&
                   (tasksByDay[selectedDate.toDateString()]?.length ?? 0) > 0 ? (
                     tasksByDay[selectedDate.toDateString()].map((t: any) => {
-                      
-                      // ============================================
-                      // UPDATE: Logic lấy icon & title từ loại Task
-                      // ============================================
                       const isCourse = t.type === "course";
                       const isReview = t.type === "review";
                       const isClass = t.type === "class";
@@ -763,7 +763,6 @@ export default function PersonalPage() {
                         ? "bg-orange-50 text-orange-500" 
                         : "bg-indigo-50 text-indigo-500";
                   
-                      // Nếu là class, thử lấy tên lớp hiện tại, không thì để "Live Class"
                       const title = isCourse 
                         ? t.courses?.title ?? "Lesson" 
                         : isReview 
@@ -786,12 +785,9 @@ export default function PersonalPage() {
                           className="group flex items-center justify-between p-4 rounded-[16px] bg-white/60 border border-white/80 shadow-[0_2px_8px_-4px_rgba(0,0,0,0.05)] backdrop-blur-md cursor-pointer hover:bg-white/90 hover:shadow-md hover:-translate-y-0.5 transition-all duration-300"
                         >
                           <div className="flex items-start gap-3.5">
-                            {/* Khối Icon bên trái */}
                             <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 mt-0.5 transition-colors ${iconBg}`}>
                               <TaskIcon size={18} strokeWidth={2.5} />
                             </div>
-                            
-                            {/* Nội dung chính */}
                             <div className="text-left flex flex-col justify-center min-h-[40px]">
                               <p className="text-[14px] font-semibold text-ink leading-tight mb-1 group-hover:text-accent transition-colors line-clamp-1">
                                 {title}
@@ -803,8 +799,6 @@ export default function PersonalPage() {
                               </div>
                             </div>
                           </div>
-                  
-                          {/* Nút Play/Hành động hiện ra khi Hover */}
                           <button className="flex items-center justify-center w-8 h-8 shrink-0 rounded-full bg-ink/5 text-ink/40 group-hover:bg-accent group-hover:text-white transition-colors duration-300">
                             <PlayCircle size={16} />
                           </button>
