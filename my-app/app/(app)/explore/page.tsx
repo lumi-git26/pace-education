@@ -7,13 +7,14 @@ import { supabase } from "@/lib/supabase/client";
 import CourseCard, { CourseCardData } from "@/components/CourseCard";
 import { motion, AnimatePresence } from "framer-motion";
 
-type Tab = "recent" | "recommend" | "trending" | "classrooms";
+// 1. Đổi "recent" thành "all", và "classrooms" có thể giữ key nhưng đổi label
+type Tab = "all" | "recommend" | "trending" | "classrooms";
 
 const TABS: { key: Tab; label: string }[] = [
-  { key: "recent", label: "Recent" },
+  { key: "all", label: "All" },
   { key: "recommend", label: "Recommend" },
   { key: "trending", label: "Trending" },
-  { key: "classrooms", label: "Classrooms" },
+  { key: "classrooms", label: "Classroom" },
 ];
 
 const LEARNING_TOPICS = ["IELTS", "Finance", "English", "Spanish", "Data Analysis"];
@@ -50,10 +51,11 @@ export default function ExplorePage() {
 
   const [courses, setCourses] = useState<CourseCardData[]>([]);
   const [classrooms, setClassrooms] = useState<ClassroomData[]>([]);
-  const [recentCourseIds, setRecentCourseIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [tab, setTab] = useState<Tab>("recent");
+  
+  // Mặc định hiển thị tab All
+  const [tab, setTab] = useState<Tab>("all");
   const [query, setQuery] = useState("");
 
   const [isScrolled, setIsScrolled] = useState(false);
@@ -106,7 +108,7 @@ export default function ExplorePage() {
         .from("courses")
         .select("id, title, description, status, created_at, profiles(full_name)")
         .eq("status", "published")
-        .order("created_at", { ascending: false });
+        .order("created_at", { ascending: false }); // Đã tự động sort mới nhất lên đầu
 
       if (cancelled) return;
 
@@ -135,33 +137,6 @@ export default function ExplorePage() {
       const counts = Object.values(countByCourse);
       const averageEnrollment =
         counts.length > 0 ? counts.reduce((a, b) => a + b, 0) / counts.length : 0;
-
-      // Lịch sử xem (Recent)
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-
-      let recentIds: string[] = [];
-      if (user) {
-        const sevenDaysAgo = new Date(
-          Date.now() - 7 * 24 * 60 * 60 * 1000
-        ).toISOString();
-        const { data: views } = await supabase
-          .from("course_views")
-          .select("course_id, viewed_at")
-          .eq("learner_id", user.id)
-          .gte("viewed_at", sevenDaysAgo)
-          .order("viewed_at", { ascending: false });
-
-        const seen = new Set<string>();
-        (views ?? []).forEach((v: any) => {
-          if (!seen.has(v.course_id)) {
-            seen.add(v.course_id);
-            recentIds.push(v.course_id);
-          }
-        });
-      }
-      if (!cancelled) setRecentCourseIds(recentIds);
 
       // RPC Preview cho Courses
       const mappedCourses: CourseCardData[] = await Promise.all(
@@ -209,7 +184,6 @@ export default function ExplorePage() {
       );
 
       if (!cancelled) {
-        // Đã sửa mảng profiles để TypeScript không báo lỗi nữa
         const formattedClassrooms: ClassroomData[] = (classRows ?? []).map((c: any) => ({
           id: c.id,
           title: c.title,
@@ -246,7 +220,7 @@ export default function ExplorePage() {
     pushRecentSearch(query);
   }
 
-  // Lọc dữ liệu Khóa học
+  // Lọc dữ liệu Khóa học (Đã cập nhật logic cho tab "all")
   const visibleCourses = useMemo(() => {
     let list = courses.filter((c) =>
       c.title.toLowerCase().includes(query.toLowerCase())
@@ -257,14 +231,6 @@ export default function ExplorePage() {
         .filter((c) => c.isHot)
         .slice()
         .sort((a, b) => (b.enrolledCount ?? 0) - (a.enrolledCount ?? 0));
-    } else if (tab === "recent") {
-      const order = new Map(recentCourseIds.map((id, i) => [id, i]));
-      list = list
-        .filter((c) => order.has(String(c.id)))
-        .slice()
-        .sort(
-          (a, b) => (order.get(String(a.id)) ?? 0) - (order.get(String(b.id)) ?? 0)
-        );
     } else if (tab === "recommend") {
       const searches = getRecentSearches().map((s) => s.toLowerCase());
       if (searches.length > 0) {
@@ -281,9 +247,11 @@ export default function ExplorePage() {
           .sort((a, b) => (b.enrolledCount ?? 0) - (a.enrolledCount ?? 0));
       }
     }
+    // Nếu tab === "all", list sẽ giữ nguyên (chỉ bị lọc bởi query tìm kiếm) 
+    // và mặc định đã được sort descending theo created_at từ Supabase.
 
     return list;
-  }, [courses, query, tab, recentCourseIds]);
+  }, [courses, query, tab]);
 
   // Lọc dữ liệu Lớp học
   const visibleClassrooms = useMemo(() => {
@@ -460,11 +428,11 @@ export default function ExplorePage() {
               {!loading && !error && tab !== "classrooms" && visibleCourses.length === 0 && (
                 <div className="rounded-[32px] border border-line bg-white/80 backdrop-blur-md p-14 text-center text-sm text-muted shadow-sm">
                   <p className="text-xl mb-3 text-ink font-medium">
-                    {tab === "recent" && "No recent activity 🌱"}
+                    {tab === "all" && "No courses found 🌱"}
                     {tab === "recommend" && "Nothing to recommend yet 🌱"}
                     {tab === "trending" && "Nothing trending yet 🌱"}
                   </p>
-                  {tab === "recent" && "Courses you preview in the last 7 days will show up here."}
+                  {tab === "all" && "Check back later for new courses."}
                   {tab === "recommend" && "Search for a topic, and we'll recommend related courses."}
                   {tab === "trending" && "Trending courses appear once enrollment picks up."}
                 </div>

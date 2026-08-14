@@ -11,6 +11,7 @@ type ClassroomDetail = {
   title: string;
   subject_code: string | null;
   cohort_label: string | null;
+  schedule_summary: string | null;
   profiles: { full_name: string } | null;
 };
 
@@ -34,11 +35,11 @@ export default function ClassroomDetailPage() {
       const { data: { user } } = await supabase.auth.getUser();
 
       // 1. Lấy thông tin chi tiết của lớp học
-      const { data: classData, error: classErr } = await supabase
-        .from("classrooms")
-        .select("id, title, subject_code, cohort_label, profiles(full_name)")
-        .eq("id", classId)
-        .single();
+        const { data: classData, error: classErr } = await supabase
+          .from("classrooms")
+          .select("id, title, subject_code, cohort_label, schedule_summary, profiles(full_name)") // THÊM Ở ĐÂY
+          .eq("id", classId)
+          .single();
 
       if (classErr) {
         setError("Classroom not found.");
@@ -187,6 +188,15 @@ export default function ClassroomDetailPage() {
                 <p className="text-sm font-medium">
                   Led by <span className="font-bold text-ink">{classroom.profiles?.full_name ?? "Instructor"}</span>
                 </p>
+                {/* Hiển thị Lịch học bằng Text */}
+                  {classroom.schedule_summary && (
+                    <div className="flex items-center gap-2 mt-4 px-4 py-2.5 bg-[#F9F9F8] rounded-xl border border-dashed border-line/80 w-fit">
+                      <Calendar size={14} className="text-orange-500" />
+                      <span className="text-[13px] font-medium text-ink/80">
+                        {classroom.schedule_summary}
+                      </span>
+                    </div>
+                  )}
               </div>
             </div>
 

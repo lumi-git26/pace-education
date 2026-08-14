@@ -687,6 +687,12 @@ export default function PersonalPage() {
                     const dayKey = d.toDateString();
                     const hasTasks = (tasksByDay[dayKey]?.length ?? 0) > 0;
                     const hasPastActivity = activeDays.has(dayKey);
+                    
+                    // ============================================
+                    // UPDATE: Bắt thứ 7 và CN để hiện màu đỏ
+                    // ============================================
+                    const isWeekend = d.getDay() === 0 || d.getDay() === 6;
+
                     return (
                       <button
                         key={d.toISOString()}
@@ -695,10 +701,11 @@ export default function PersonalPage() {
                           "relative flex flex-col items-center gap-1 rounded-xl py-2.5 text-center transition-colors duration-200 cursor-pointer",
                           isSelected
                             ? "bg-ink text-white shadow-sm"
-                            : "text-ink/70 hover:bg-white/60",
+                            : "hover:bg-white/60",
+                          !isSelected && isWeekend ? "text-red-500/90" : !isSelected ? "text-ink/70" : ""
                         ].join(" ")}
                       >
-                        <span className="text-[10px] uppercase font-semibold opacity-70">
+                        <span className={`text-[10px] uppercase font-semibold ${isSelected ? 'opacity-90' : 'opacity-70'}`}>
                           {d.toLocaleDateString("en-US", { weekday: "short" }).charAt(0)}
                         </span>
                         <span className="text-[14px] font-bold">{d.getDate()}</span>
@@ -740,9 +747,14 @@ export default function PersonalPage() {
                   {selectedDate &&
                   (tasksByDay[selectedDate.toDateString()]?.length ?? 0) > 0 ? (
                     tasksByDay[selectedDate.toDateString()].map((t: any) => {
-                      // 1. Phân tích loại Task để chọn Icon và Màu sắc phù hợp
+                      
+                      // ============================================
+                      // UPDATE: Logic lấy icon & title từ loại Task
+                      // ============================================
                       const isCourse = t.type === "course";
                       const isReview = t.type === "review";
+                      const isClass = t.type === "class";
+                      
                       const TaskIcon = isCourse ? BookOpen : isReview ? Sparkles : Video;
                       
                       const iconBg = isCourse 
@@ -751,10 +763,13 @@ export default function PersonalPage() {
                         ? "bg-orange-50 text-orange-500" 
                         : "bg-indigo-50 text-indigo-500";
                   
+                      // Nếu là class, thử lấy tên lớp hiện tại, không thì để "Live Class"
                       const title = isCourse 
                         ? t.courses?.title ?? "Lesson" 
                         : isReview 
                         ? "Spaced Repetition" 
+                        : isClass && classroom?.title
+                        ? classroom.title
                         : "Live Class";
                   
                       return (
@@ -763,6 +778,9 @@ export default function PersonalPage() {
                           onClick={() => {
                             if (isCourse && t.course_id) {
                               router.push(`/courses/${t.course_id}`);
+                            }
+                            if (isClass && classroom?.id) {
+                              router.push(`/personal/classroom/${classroom.id}`);
                             }
                           }}
                           className="group flex items-center justify-between p-4 rounded-[16px] bg-white/60 border border-white/80 shadow-[0_2px_8px_-4px_rgba(0,0,0,0.05)] backdrop-blur-md cursor-pointer hover:bg-white/90 hover:shadow-md hover:-translate-y-0.5 transition-all duration-300"
