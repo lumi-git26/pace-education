@@ -1,217 +1,119 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
-import { useState } from "react";
-import { 
-  User, 
-  Library, 
-  Search, 
-  LogOut, 
-  Globe, 
-  Moon, 
-  Sparkles,
-  ChevronUp,
-  Crown
-} from "lucide-react";
+import { usePathname } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { useProfile } from "@/lib/supabase/useProfile";
+import { 
+  Compass, 
+  BookUser, 
+  Settings, 
+  Presentation, 
+  Users, 
+  ArrowLeftRight,
+  LogOut,
+  Sparkles
+} from "lucide-react";
 
-const NAV = [
-  { href: "/personal", label: "Personal", icon: User },
-  { href: "/courses", label: "Courses", icon: Library },
-  { href: "/explore", label: "Explore", icon: Search },
+const LEARNER_LINKS = [
+  { label: "Explore", href: "/explore", icon: Compass },
+  { label: "Personal", href: "/personal", icon: BookUser },
+  // Cậu có thể thêm trang Settings cho Learner sau này
+  // { label: "Settings", href: "/settings", icon: Settings }, 
+];
+
+const CREATOR_LINKS = [
+  // Nếu có trang dashboard tổng quan thì bật dòng này lên:
+  // { label: "Dashboard", href: "/creator/dashboard", icon: LayoutDashboard },
+  { label: "Courses", href: "/creator/courses", icon: Presentation },
+  { label: "Classrooms", href: "/creator/classrooms", icon: Users },
 ];
 
 export default function Sidebar() {
   const pathname = usePathname();
-  const router = useRouter();
-  const { profile } = useProfile();
   
-  const [open, setOpen] = useState(false);
-  const [showProfileCard, setShowProfileCard] = useState(false);
+  // Kiểm tra xem có đang ở trong khu vực của Creator không
+  const isCreatorMode = pathname.startsWith("/creator");
 
-  function handleSignOut() {
-    router.push("/sign-in");
-  }
-
-  // Tự động đóng popup profile khi sidebar thụt vào
-  function handleMouseLeave() {
-    setOpen(false);
-    setShowProfileCard(false);
-  }
-
-  // Dữ liệu giả lập cho thẻ mở rộng (Sau này cậu fetch từ DB)
-  const mockStats = { enrolled: 3, passed: 12, streak: 7 };
-  const currentTier = "Gold Learner"; // Tiền đề cho hệ thống Tier sau này
+  const links = isCreatorMode ? CREATOR_LINKS : LEARNER_LINKS;
 
   return (
-    <>
-      {/* Vùng kích hoạt sidebar ẩn bên mép trái */}
-      <div
-        className="fixed left-0 top-0 z-[90] h-full w-4"
-        onMouseEnter={() => setOpen(true)}
-      />
-
-      <aside
-        onMouseEnter={() => setOpen(true)}
-        onMouseLeave={handleMouseLeave}
-        className={[
-          "fixed left-0 top-0 z-[100] flex h-[calc(100vh-48px)] w-[240px] flex-col",
-          "m-6 rounded-[32px] bg-white/90 backdrop-blur-xl px-5 py-8 shadow-xl",
-          "transition-transform duration-300 ease-out border border-white/60",
-          open ? "translate-x-0" : "-translate-x-[calc(100%+24px)]",
-        ].join(" ")}
-      >
-        
-        {/* TOP: Brand Logo */}
-        <div className="flex items-center gap-3 px-3 mb-10">
-          <div className="w-9 h-9 rounded-xl bg-accent text-white flex items-center justify-center shadow-sm">
-            <Sparkles size={18} />
-          </div>
-          <span className="font-serif text-[22px] font-bold text-ink tracking-tight">
-            pace.
+    <div className="flex h-screen w-64 flex-col border-r border-line/50 bg-[#F9F9F8]/80 backdrop-blur-xl shrink-0 sticky top-0">
+      
+      {/* ================== LOGO ================== */}
+      <div className="flex items-center gap-3 px-8 h-24 shrink-0">
+        <div className="w-8 h-8 bg-ink rounded-lg flex items-center justify-center text-white">
+          <Sparkles size={16} />
+        </div>
+        <span className="font-serif text-2xl font-bold text-ink tracking-wide">
+          Pace.
+        </span>
+        {isCreatorMode && (
+          <span className="ml-1 rounded-full bg-[#F2994A]/10 px-2 py-0.5 text-[9px] font-bold text-[#F2994A] uppercase tracking-wider">
+            Creator
           </span>
-        </div>
+        )}
+      </div>
 
-        {/* MIDDLE: Navigation */}
-        <div className="flex flex-col gap-3 flex-1">
-          {NAV.map(({ href, label, icon: Icon }) => {
-            const active = pathname?.startsWith(href);
-            return (
-              <Link
-                key={href}
-                href={href}
-                className={[
-                  "flex flex-row items-center gap-4 w-full px-4 py-3.5 rounded-[20px] transition-all",
-                  active
-                    ? "bg-ink text-paper shadow-md"
-                    : "text-ink/60 hover:bg-ink/5 hover:text-ink",
-                ].join(" ")}
-              >
-                <Icon size={20} strokeWidth={active ? 2.5 : 2} />
-                <span className="text-[14px] font-semibold tracking-wide">
-                  {label}
-                </span>
-              </Link>
-            );
-          })}
-        </div>
-
-        {/* BOTTOM: Profile Area */}
-        <div className="relative mt-auto">
-          
-          {/* ================= FULL PROFILE CARD (POPOVER) ================= */}
-          <AnimatePresence>
-            {showProfileCard && (
-              <motion.div 
-                initial={{ opacity: 0, y: 20, scale: 0.95 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                exit={{ opacity: 0, y: 15, scale: 0.95 }}
-                transition={{ duration: 0.2, ease: "easeOut" }}
-                className="absolute bottom-[calc(100%+16px)] left-0 w-[260px] bg-white/95 backdrop-blur-2xl border border-white shadow-[0_20px_40px_rgb(0,0,0,0.12)] rounded-[28px] overflow-hidden z-50 flex flex-col"
-              >
-                {/* Khu vực Customized Tier Background (Có thể đổi gradient theo hạng) */}
-                <div className="bg-gradient-to-br from-ink to-ink/90 p-5 text-white relative">
-                  {/* Hiệu ứng kính bóng */}
-                  <div className="absolute top-0 left-0 w-full h-1/2 bg-gradient-to-b from-white/10 to-transparent pointer-events-none" />
-                  
-                  <div className="flex justify-between items-start mb-4">
-                    <div className="w-12 h-12 rounded-full bg-white/20 backdrop-blur-md flex items-center justify-center font-serif font-bold text-lg border border-white/20 shadow-inner">
-                      {(profile?.full_name ?? "K").charAt(0)}
-                    </div>
-                    {/* Tier Badge */}
-                    <div className="flex items-center gap-1 bg-gradient-to-r from-amber-200 to-yellow-400 text-amber-900 text-[9px] font-bold uppercase tracking-wider px-2 py-1 rounded-full shadow-sm">
-                      <Crown size={10} /> {currentTier}
-                    </div>
-                  </div>
-
-                  <div>
-                    <p className="text-[15px] font-semibold truncate">
-                      {profile?.full_name ?? "Sáng (Kira)"}
-                    </p>
-                    <p className="text-[11px] text-white/60 font-medium mt-0.5 tracking-wide">
-                      K63.FTU Learner
-                    </p>
-                  </div>
-
-                  {/* Chỉ số cá nhân */}
-                  <div className="grid grid-cols-3 gap-2 text-center border-t border-white/15 pt-4 mt-4">
-                    <div>
-                      <p className="font-serif text-lg font-bold">{mockStats.enrolled}</p>
-                      <p className="text-[9px] text-white/50 uppercase tracking-widest mt-1">Enrolled</p>
-                    </div>
-                    <div>
-                      <p className="font-serif text-lg font-bold">{mockStats.passed}</p>
-                      <p className="text-[9px] text-white/50 uppercase tracking-widest mt-1">Passed</p>
-                    </div>
-                    <div>
-                      <p className="font-serif text-lg font-bold text-amber-400">{mockStats.streak}</p>
-                      <p className="text-[9px] text-white/50 uppercase tracking-widest mt-1">Streak</p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Khu vực Settings */}
-                <div className="p-2.5 bg-white/50 flex flex-col gap-0.5">
-                  <button className="flex items-center gap-3 px-4 py-3 rounded-[16px] hover:bg-ink/5 text-[13px] font-semibold text-ink transition-colors">
-                    <Globe size={16} className="text-muted" /> Language
-                  </button>
-                  <button className="flex items-center gap-3 px-4 py-3 rounded-[16px] hover:bg-ink/5 text-[13px] font-semibold text-ink transition-colors">
-                    <Moon size={16} className="text-muted" /> Theme
-                  </button>
-                  <div className="h-px w-full bg-line/60 my-1" />
-                  <button 
-                    onClick={handleSignOut} 
-                    className="flex items-center gap-3 px-4 py-3 rounded-[16px] hover:bg-red-50 text-[13px] font-semibold text-red-500 transition-colors group"
-                  >
-                    <LogOut size={16} className="group-hover:text-red-500 text-red-400" /> Sign out
-                  </button>
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-
-          {/* ================= MINI CARD (TRONG SIDEBAR) ================= */}
-          <button 
-            onClick={() => setShowProfileCard(!showProfileCard)}
-            className={[
-              "w-full flex items-center justify-between p-2 rounded-[20px] transition-colors border",
-              showProfileCard 
-                ? "bg-ink text-white border-ink shadow-md" 
-                : "bg-white border-line/60 hover:bg-line/20 text-ink"
-            ].join(" ")}
+      {/* ================== NAVIGATION LINKS ================== */}
+      <div className="flex-1 px-5 py-4 space-y-1.5 overflow-y-auto custom-scrollbar">
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={isCreatorMode ? "creator" : "learner"}
+            initial={{ opacity: 0, x: -10 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: 10 }}
+            transition={{ duration: 0.2 }}
+            className="flex flex-col gap-1.5"
           >
-            <div className="flex items-center gap-2.5 overflow-hidden">
-              <div className={[
-                "w-9 h-9 rounded-full flex items-center justify-center font-serif font-bold text-sm shrink-0 transition-colors",
-                showProfileCard ? "bg-white/20" : "bg-ink/5 text-ink"
-              ].join(" ")}>
-                {(profile?.full_name ?? "K").charAt(0)}
-              </div>
-              <div className="flex flex-col text-left min-w-0 pr-2">
-                <span className="text-[12px] font-semibold truncate leading-tight">
-                  {profile?.full_name ?? "Kira"}
-                </span>
-                <span className={[
-                  "text-[9px] font-bold uppercase tracking-widest mt-0.5",
-                  showProfileCard ? "text-white/60" : "text-accent"
-                ].join(" ")}>
-                  {currentTier}
-                </span>
-              </div>
-            </div>
-            
-            <motion.div 
-              animate={{ rotate: showProfileCard ? 180 : 0 }} 
-              className={`shrink-0 pr-1 ${showProfileCard ? "text-white/60" : "text-muted"}`}
-            >
-              <ChevronUp size={16} />
-            </motion.div>
-          </button>
+            {links.map((link) => {
+              // Active khi pathname khớp chính xác hoặc nằm trong route con
+              const isActive = pathname === link.href || pathname.startsWith(`${link.href}/`);
+              const Icon = link.icon;
 
-        </div>
-      </aside>
-    </>
+              return (
+                <Link
+                  key={link.href}
+                  href={link.href}
+                  className={[
+                    "flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all duration-200 group relative",
+                    isActive
+                      ? "bg-ink text-white shadow-sm"
+                      : "text-muted hover:bg-line/40 hover:text-ink",
+                  ].join(" ")}
+                >
+                  <Icon 
+                    size={18} 
+                    className={isActive ? "text-white" : "text-muted group-hover:text-ink transition-colors"} 
+                  />
+                  {link.label}
+                </Link>
+              );
+            })}
+          </motion.div>
+        </AnimatePresence>
+      </div>
+
+      {/* ================== BOTTOM ACTIONS ================== */}
+      <div className="p-5 border-t border-line/50 flex flex-col gap-2">
+        
+        {/* Nút Switch Mode */}
+        <Link
+          href={isCreatorMode ? "/personal" : "/creator/courses"}
+          className="flex items-center gap-3 px-4 py-3 rounded-xl text-[13px] font-bold text-ink bg-white border border-line/60 shadow-sm hover:shadow-md hover:border-[#F2994A]/40 transition-all group"
+        >
+          <div className="w-6 h-6 rounded-md bg-[#F9F9F8] border border-line/50 flex items-center justify-center text-muted group-hover:text-[#F2994A] transition-colors">
+            <ArrowLeftRight size={12} />
+          </div>
+          {isCreatorMode ? "Back to Learning" : "Creator Studio"}
+        </Link>
+
+        {/* Nút Đăng xuất (Tùy chọn) */}
+        <button className="flex items-center gap-3 px-4 py-3 rounded-xl text-[13px] font-semibold text-muted hover:bg-red-50 hover:text-red-500 transition-colors w-full text-left">
+          <LogOut size={16} />
+          Sign out
+        </button>
+
+      </div>
+    </div>
   );
 }
