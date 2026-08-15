@@ -103,7 +103,6 @@ export default function PersonalPage() {
   const [nextLessons, setNextLessons] = useState<NextLesson[]>([]);
   const [classrooms, setClassrooms] = useState<ClassroomInfo[]>([]);
 
-  // === THÊM STATE CHO LOGIC EXPAND/COLLAPSE ===
   const [showAllClasses, setShowAllClasses] = useState(false);
   const [showAllCourses, setShowAllCourses] = useState(false);
 
@@ -155,7 +154,7 @@ export default function PersonalPage() {
       if (cancelled) return;
       setCourses(mapped);
 
-      // --- Continue learning (Tối đa 3 bài học) ---
+      // --- Continue learning ---
       const inProgressCourses = mapped.filter((c) => c.progress < 100).slice(0, 3);
       const loadedNextLessons: NextLesson[] = [];
 
@@ -327,7 +326,7 @@ export default function PersonalPage() {
         setTasksByDay(grouped);
       }
 
-      // --- Classrooms (Lấy tất cả các lớp, hiển thị sẽ do mảng UI lo) ---
+      // --- Classrooms ---
       const { data: membership } = await supabase
         .from("classroom_members")
         .select(
@@ -338,7 +337,6 @@ export default function PersonalPage() {
 
       if (!cancelled && membership) {
         const loadedClasses: ClassroomInfo[] = [];
-
         const reversed = [...membership].reverse();
 
         for (let i = 0; i < reversed.length; i++) {
@@ -346,7 +344,6 @@ export default function PersonalPage() {
           if (!c) continue;
 
           let latestPost = null;
-          // Chỉ lấy Announcements cho tối đa 5 lớp đầu để tối ưu
           if (i < 5) {
             const { data } = await supabase
               .from("classroom_announcements")
@@ -394,7 +391,6 @@ export default function PersonalPage() {
   const currentWeekTotal = weekBars.reduce((sum, b) => sum + b.hours, 0).toFixed(1);
   const maxWeekHour = Math.max(1, ...weekBars.map((b) => b.hours));
 
-  // Phân trang bằng UI
   const visibleClasses = showAllClasses ? classrooms : classrooms.slice(0, 2);
   const visibleCourses = showAllCourses ? courses : courses.slice(0, 3);
 
@@ -455,12 +451,8 @@ export default function PersonalPage() {
         {/* ============ LEFT COLUMN ============ */}
         <div className="space-y-6">
           
-          {/* --- 1. ACTIVE CLASSROOMS --- */}
-          {loading ? (
-            <div className="rounded-[20px] bg-white/60 backdrop-blur-xl border border-white/60 shadow-sm p-6">
-              <div className="h-32 animate-pulse rounded-xl bg-line/40" />
-            </div>
-          ) : classrooms.length > 0 ? (
+          {/* --- 1. ACTIVE CLASSROOMS (CHỈ HIỆN Ở ĐÂY NẾU CÓ DATA) --- */}
+          {!loading && classrooms.length > 0 && (
             <div className="rounded-[20px] bg-white/60 backdrop-blur-xl border border-white/60 shadow-sm p-6 flex flex-col gap-6">
               <h3 className="flex items-center gap-2 text-[11px] font-bold text-muted uppercase tracking-wider">
                 <Users size={14} /> Active Classrooms
@@ -597,31 +589,9 @@ export default function PersonalPage() {
                 </button>
               )}
             </div>
-          ) : (
-            <div className="rounded-[20px] bg-white/60 backdrop-blur-xl border border-white/60 shadow-sm p-6">
-              <h3 className="flex items-center gap-2 text-[11px] font-bold text-muted uppercase tracking-wider mb-5">
-                <Users size={14} /> Active Classrooms
-              </h3>
-              
-              <div className="rounded-xl border border-dashed border-line/80 bg-[#F9F9F8] p-8 flex flex-col items-center justify-center text-center transition-colors hover:border-indigo-200">
-                <div className="w-12 h-12 rounded-full bg-indigo-50 flex items-center justify-center text-indigo-400 mb-4 shadow-sm">
-                  <Users size={20} />
-                </div>
-                <p className="text-[14px] font-semibold text-ink mb-1.5">No active classes</p>
-                <p className="text-[12px] text-muted mb-5 max-w-[260px] leading-relaxed">
-                  Join an instructor-led cohort to get live sessions, peer interactions, and the latest announcements.
-                </p>
-                <button
-                  onClick={() => router.push("/explore")}
-                  className="rounded-lg bg-ink text-white px-5 py-2.5 text-[12px] font-medium hover:bg-indigo-600 transition-colors shadow-sm"
-                >
-                  Explore Classes
-                </button>
-              </div>
-            </div>
           )}
 
-          {/* --- 2. CONTINUE LEARNING (Hiện max 3 cái) --- */}
+          {/* --- 2. CONTINUE LEARNING --- */}
           <div className="rounded-[20px] bg-white/60 backdrop-blur-xl border border-white/60 shadow-sm p-6">
             <h3 className="text-[11px] font-bold text-muted uppercase tracking-wider mb-4">
               Continue learning
@@ -737,6 +707,35 @@ export default function PersonalPage() {
               </>
             )}
           </div>
+
+          {/* --- 4. ACTIVE CLASSROOMS (CHỈ HIỆN Ở ĐÂY NẾU ĐANG LOADING HOẶC TRỐNG) --- */}
+          {loading ? (
+            <div className="rounded-[20px] bg-white/60 backdrop-blur-xl border border-white/60 shadow-sm p-6">
+              <div className="h-32 animate-pulse rounded-xl bg-line/40" />
+            </div>
+          ) : classrooms.length === 0 ? (
+            <div className="rounded-[20px] bg-white/60 backdrop-blur-xl border border-white/60 shadow-sm p-6">
+              <h3 className="flex items-center gap-2 text-[11px] font-bold text-muted uppercase tracking-wider mb-5">
+                <Users size={14} /> Active Classrooms
+              </h3>
+              
+              <div className="rounded-xl border border-dashed border-line/80 bg-[#F9F9F8] p-8 flex flex-col items-center justify-center text-center transition-colors hover:border-indigo-200">
+                <div className="w-12 h-12 rounded-full bg-indigo-50 flex items-center justify-center text-indigo-400 mb-4 shadow-sm">
+                  <Users size={20} />
+                </div>
+                <p className="text-[14px] font-semibold text-ink mb-1.5">No active classes</p>
+                <p className="text-[12px] text-muted mb-5 max-w-[260px] leading-relaxed">
+                  Join an instructor-led cohort to get live sessions, peer interactions, and the latest announcements.
+                </p>
+                <button
+                  onClick={() => router.push("/explore")}
+                  className="rounded-lg bg-ink text-white px-5 py-2.5 text-[12px] font-medium hover:bg-indigo-600 transition-colors shadow-sm"
+                >
+                  Explore Classes
+                </button>
+              </div>
+            </div>
+          ) : null}
 
         </div>
 
@@ -886,7 +885,6 @@ export default function PersonalPage() {
               </AnimatePresence>
             </div>
           </div>
-          {/* ==================================================================== */}
 
           {/* Insights */}
           <div 
