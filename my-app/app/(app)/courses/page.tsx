@@ -4,22 +4,19 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase/client";
 import { useProfile } from "@/lib/supabase/useProfile";
-import { Search as SearchIcon, PlayCircle } from "lucide-react";
+import { Search as SearchIcon, PlayCircle, Users } from "lucide-react";
 
-type Tab = "active" | "archived";
+type Tab = "active" | "archived" | "classes";
 
-type CourseRow = {
-  id: string;
-  title: string;
-  status: string;
-  progress?: number;
-};
+type CourseRow = { id: string; title: string; status: string; progress?: number };
+type ClassRow = { id: string; title: string; subjectCode: string | null };
 
 export default function CoursesPage() {
   const { profile } = useProfile();
   const router = useRouter();
   const [tab, setTab] = useState<Tab>("active");
   const [courses, setCourses] = useState<CourseRow[]>([]);
+  const [classes, setClasses] = useState<ClassRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
@@ -27,7 +24,7 @@ export default function CoursesPage() {
   useEffect(() => {
     let cancelled = false;
 
-    async function fetchEnrolled() {
+    async function fetchAll() {
       setLoading(true);
       setError(null);
 
@@ -38,6 +35,7 @@ export default function CoursesPage() {
       if (!user) {
         if (!cancelled) {
           setCourses([]);
+          setClasses([]);
           setLoading(false);
         }
         return;
@@ -48,6 +46,12 @@ export default function CoursesPage() {
         .select("status, progress_pct, courses(id, title, status)")
         .eq("learner_id", user.id)
         .order("enrolled_at", { ascending: false });
+
+      const { data: classData } = await supabase
+        .from("classroom_members")
+        .select("classrooms(id, title, subject_code)")
+        .eq("learner_id", user.id)
+        .eq("status", "active");
 
       if (cancelled) return;
 
@@ -65,23 +69,34 @@ export default function CoursesPage() {
           }));
         setCourses(mapped);
       }
+
+      setClasses(
+        (classData ?? [])
+          .filter((row: any) => row.classrooms)
+          .map((row: any) => ({
+            id: row.classrooms.id,
+            title: row.classrooms.title,
+            subjectCode: row.classrooms.subject_code,
+          }))
+      );
+
       setLoading(false);
     }
 
-    fetchEnrolled();
+    fetchAll();
     return () => {
       cancelled = true;
     };
   }, []);
 
-  const visible = courses.filter((c) => {
-    const matchTab =
-      tab === "active" ? c.status !== "archived" : c.status === "archived";
-    const matchSearch = c.title
-      .toLowerCase()
-      .includes(searchQuery.toLowerCase());
-    return matchTab && matchSearch;
+  const visibleCourses = courses.filter((c) => {
+    const matchTab = tab === "active" ? c.status !== "archived" : c.status === "archived";
+    return matchTab && c.title.toLowerCase().includes(searchQuery.toLowerCase());
   });
+
+  const visibleClasses = classes.filter((c) =>
+    c.title.toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
   const firstName = profile?.full_name?.split(" ")[0] ?? "there";
 
@@ -97,7 +112,7 @@ export default function CoursesPage() {
             <input
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search your courses..."
+              placeholder="Search..."
               className="w-full rounded-pill border border-line bg-white/60 backdrop-blur-md py-3 pl-6 pr-12 text-[15px] text-ink outline-none placeholder:text-muted focus:border-accent shadow-sm transition-all"
             />
             <button className="absolute top-1/2 right-1.5 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full bg-accent text-white hover:scale-105 transition-transform cursor-pointer">
@@ -107,53 +122,71 @@ export default function CoursesPage() {
         </div>
 
         <div className="flex items-center gap-10 border-b border-line/80 pb-3 mb-8">
-          <button
-            onClick={() => setTab("active")}
-            className={[
-              "relative pb-3 text-[15px] font-semibold transition-colors",
-              tab === "active" ? "text-accent" : "text-muted hover:text-ink",
-            ].join(" ")}
-          >
-            Your courses
-            {tab === "active" && (
-              <span className="absolute -bottom-[1px] left-0 right-0 h-[2px] bg-accent rounded-t-full" />
-            )}
-          </button>
-          <button
-            onClick={() => setTab("archived")}
-            className={[
-              "relative pb-3 text-[15px] font-semibold transition-colors",
-              tab === "archived" ? "text-accent" : "text-muted hover:text-ink",
-            ].join(" ")}
-          >
-            Archived
-            {tab === "archived" && (
-              <span className="absolute -bottom-[1px] left-0 right-0 h-[2px] bg-accent rounded-t-full" />
-            )}
-          </button>
+          {[
+            { key: "active", label: "Your courses" },
+            { key: "classes", label: "Your Class" },
+            { key: "archived", label: "Archived" },
+          ].map(({ key, label }) => (
+            <button
+              key={key}
+              onClick={() => setTab(key as Tab)}
+              className={[
+                "relative pb-3 text-[15px] font-semibold transition-colors",
+                tab === key ? "text-accent" : "text-muted hover:text-ink",
+              ].join(" ")}
+            >
+              {label}
+              {tab === key && (
+                <span className="absolute -bottom-[1px] left-0 right-0 h-[2px] bg-accent rounded-t-full" />
+              )}
+            </button>
+          ))}
         </div>
 
         <div className="pb-12">
-          {loading && (
+          {loading ? (
             <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
               {[...Array(4)].map((_, i) => (
-                <div
-                  key={i}
-                  className="h-56 animate-pulse rounded-[32px] border border-line bg-white/40"
-                />
+                <div key={i} className="h-56 animate-pulse rounded-[32px] border border-line bg-white/40" />
               ))}
             </div>
-          )}
-
-          {!loading && error && (
-            <div className="pt-20 text-center">
-              <p className="text-[15px] text-muted">
-                Couldn&apos;t load your courses. ({error})
-              </p>
-            </div>
-          )}
-
-          {!loading && !error && visible.length === 0 && (
+          ) : tab === "classes" ? (
+            visibleClasses.length === 0 ? (
+              <div className="pt-24 pb-12 text-center">
+                <Users size={28} className="mx-auto mb-4 text-muted" />
+                <p className="font-serif text-[28px] font-medium text-ink mb-3">
+                  No classes yet 🌱
+                </p>
+                <p className="text-[15px] text-muted">
+                  Head to Explore to find a live class to join.
+                </p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                {visibleClasses.map((c) => (
+                  <div
+                    key={c.id}
+                    onClick={() => router.push(`/classroom/${c.id}`)}
+                    className="h-56 rounded-[32px] border border-indigo-200 bg-gradient-to-br from-indigo-50 to-white p-6 shadow-sm hover:shadow-md transition-all cursor-pointer flex flex-col justify-between"
+                  >
+                    <div>
+                      {c.subjectCode && (
+                        <span className="text-[10px] font-bold text-indigo-600 uppercase tracking-wider">
+                          {c.subjectCode}
+                        </span>
+                      )}
+                      <h3 className="font-serif text-[20px] font-bold text-ink mt-1">
+                        {c.title}
+                      </h3>
+                    </div>
+                    <span className="text-xs font-semibold text-indigo-600">
+                      Live Classroom
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )
+          ) : visibleCourses.length === 0 ? (
             <div className="pt-24 pb-12 text-center">
               <p className="font-serif text-[28px] font-medium text-ink mb-3">
                 No courses yet 🌱
@@ -164,11 +197,9 @@ export default function CoursesPage() {
                   : "Your archived courses will appear here."}
               </p>
             </div>
-          )}
-
-          {!loading && !error && visible.length > 0 && (
+          ) : (
             <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-              {visible.map((course) => (
+              {visibleCourses.map((course) => (
                 <div
                   key={course.id}
                   onClick={() => router.push(`/courses/${course.id}`)}
@@ -182,7 +213,6 @@ export default function CoursesPage() {
                       {course.title}
                     </h3>
                   </div>
-
                   <div className="mt-4">
                     <div className="flex justify-between items-center text-xs font-bold text-muted mb-2 uppercase tracking-wider">
                       <span>Progress</span>
