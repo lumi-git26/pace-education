@@ -312,17 +312,20 @@ export default function LessonPage() {
               {blocks.length > 0 ? (
                 blocks.map((block, idx) => {
                   
-                  // 1. Dạng văn bản Markdown
+// 1. Dạng văn bản Markdown
                   if (block.type === "markdown") {
                     return (
-                      <div key={idx} className="prose prose-sm md:prose-base max-w-none prose-headings:font-serif prose-headings:text-ink prose-p:text-ink/80 prose-p:leading-7 prose-strong:text-ink prose-a:text-accent">
+                      <div 
+                        key={idx} 
+                        className="prose prose-sm md:prose-base max-w-none font-['Charter','Times_New_Roman',serif] text-justify prose-headings:font-sans prose-headings:text-ink prose-p:text-ink/90 prose-p:leading-[1.2] prose-p:mb-[5pt] prose-strong:text-ink prose-a:text-accent"
+                      >
                         <ReactMarkdown
                           remarkPlugins={[remarkGfm, remarkMath]}
                           rehypePlugins={[rehypeKatex]}
                           components={{
-                            h1: ({ children }) => <h2 id={slugify(String(children))}>{children}</h2>,
-                            h2: ({ children }) => <h2 id={slugify(String(children))}>{children}</h2>,
-                            h3: ({ children }) => <h3 id={slugify(String(children))}>{children}</h3>,
+                            h1: ({ children }) => <h2 id={slugify(String(children))} className="mt-8 mb-4">{children}</h2>,
+                            h2: ({ children }) => <h2 id={slugify(String(children))} className="mt-8 mb-4">{children}</h2>,
+                            h3: ({ children }) => <h3 id={slugify(String(children))} className="mt-6 mb-3">{children}</h3>,
                             img: ({ src, alt }) => (
                               // eslint-disable-next-line @next/next/no-img-element
                               <img src={src} alt={alt} className="rounded-2xl w-full border border-line/50 shadow-sm my-6" />
