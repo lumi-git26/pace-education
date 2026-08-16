@@ -9,15 +9,15 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
-import { motion, useScroll, useSpring } from "framer-motion"; // IMPORT THÊM ĐỂ LÀM MƯỢT PROGRESS BAR
+import { motion, useScroll, useSpring } from "framer-motion";
 import "katex/dist/katex.min.css";
 
 // === ĐỊNH NGHĨA CÁC KIỂU BLOCK ===
 type Block = {
   type: "markdown" | "image" | "interactive_diagram" | "title" | "heading" | string;
   data?: string;       
-  text?: string;       // Cho title
-  level?: number;      // Cho title (vd: 1, 2, 3)
+  text?: string;       
+  level?: number;      
   url?: string;        
   caption?: string;    
   diagram_id?: string; 
@@ -35,12 +35,11 @@ type LessonDetail = {
 
 type TocItem = { id: string; text: string; level: number };
 
-// FIX: Hàm slugify hỗ trợ chuẩn Tiếng Việt để click mục lục chính xác
 function slugify(text: string) {
   return text
     .toString()
     .normalize("NFD") 
-    .replace(/[\u0300-\u036f]/g, "") // Bỏ dấu
+    .replace(/[\u0300-\u036f]/g, "") 
     .toLowerCase()
     .trim()
     .replace(/đ/g, "d")
@@ -76,7 +75,6 @@ export default function LessonPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // === XỬ LÝ PROGRESS BAR BẰNG FRAMER MOTION ===
   const { scrollYProgress } = useScroll();
   const scaleX = useSpring(scrollYProgress, {
     stiffness: 100,
@@ -147,9 +145,6 @@ export default function LessonPage() {
     };
   }, [courseId, lessonId, router]);
 
-  // ==========================================
-  // XỬ LÝ DỮ LIỆU BLOCK & TẠO MỤC LỤC
-  // ==========================================
   const blocks: Block[] = useMemo(() => {
     if (!lesson?.content) return [];
     
@@ -171,13 +166,11 @@ export default function LessonPage() {
   const toc = useMemo(() => {
     const items: TocItem[] = [];
     blocks.forEach((b) => {
-      // Bắt cả Block dạng "title" hoặc "heading"
       if (b.type === "title" || b.type === "heading") {
         const text = b.data || b.text || "";
         const level = b.level || 2;
         if (text) items.push({ id: slugify(text), text, level });
       } 
-      // Bắt thẻ # trong Markdown
       else if (b.type === "markdown") {
         items.push(...extractToc(b.data || ""));
       }
@@ -261,7 +254,6 @@ export default function LessonPage() {
 
   return (
     <div className="min-h-screen w-full bg-[#F9F9F8]">
-      {/* Nâng cấp: Scroll Progress Bar Mượt Mà */}
       <motion.div
         className="fixed top-0 left-0 right-0 z-50 h-1 bg-[#F2994A] origin-left"
         style={{ scaleX }}
@@ -283,12 +275,12 @@ export default function LessonPage() {
               {lesson.est_minutes} min lesson
             </div>
 
-            <h1 className="font-serif text-3xl md:text-4xl font-bold text-ink leading-tight mb-10">
+            <h1 className="font-serif text-3xl md:text-4xl font-bold text-ink leading-tight mb-8">
               {lesson.title}
             </h1>
 
-            {/* BLOCK RENDERER */}
-            <div className="flex flex-col gap-6">
+            {/* BLOCK RENDERER: Giảm gap xuống để các đoạn khít lại */}
+            <div className="flex flex-col gap-1.5">
               {blocks.length > 0 ? (
                 blocks.map((block, idx) => {
                   
@@ -296,38 +288,48 @@ export default function LessonPage() {
                   if (block.type === "title" || block.type === "heading") {
                     const text = block.data || block.text || "";
                     const level = block.level || 2;
-                    const Tag = `h${level}` as any;
-                    return (
-                      <Tag key={idx} id={slugify(text)} className={`font-serif text-ink mt-8 mb-3 font-bold ${level === 1 ? 'text-3xl' : level === 2 ? 'text-2xl' : 'text-xl'}`}>
-                        {text}
-                      </Tag>
-                    );
+                    // Đồng bộ kiểu Header: Level 1 (H2 Thường In đậm), Level 2 (H2 Nghiêng In đậm), Level 3 (H3 Nghiêng)
+                    if (level === 1) return <h2 key={idx} id={slugify(text)} className="mt-8 mb-2 font-serif font-bold text-2xl not-italic text-ink">{text}</h2>;
+                    if (level === 2) return <h2 key={idx} id={slugify(text)} className="mt-8 mb-2 font-serif font-bold italic text-xl text-ink">{text}</h2>;
+                    if (level >= 3) return <h3 key={idx} id={slugify(text)} className="mt-6 mb-1.5 font-serif font-normal italic text-lg text-ink/80">{text}</h3>;
                   }
 
-                  // 1. Dạng văn bản Markdown (Đã nâng cấp Header, Table & Callout)
+                  // 2. Dạng văn bản Markdown
                   if (block.type === "markdown") {
                     return (
                       <div 
                         key={idx} 
-                        // CSS định dạng tổng thể, lề đoạn văn 5pt, khoảng cách dòng 1.2, và làm đẹp Bảng
-                        className="prose prose-sm md:prose-base max-w-none font-['Charter','Times_New_Roman',serif] text-justify prose-p:text-ink/90 prose-p:leading-[1.2] prose-p:mb-[5pt] prose-strong:text-ink prose-a:text-[#F2994A] prose-table:border prose-table:border-line/60 prose-th:bg-slate-100/80 prose-th:p-3 prose-th:text-left prose-td:p-3 prose-td:border-t prose-td:border-line/40"
+                        // Tinh chỉnh lề đoạn văn, loại bỏ !my-0 thừa để nó ôm sát nội dung
+                        className="prose prose-sm md:prose-base max-w-none font-['Charter','Times_New_Roman',serif] text-justify prose-p:text-ink/90 prose-p:leading-[1.2] prose-p:mb-[5pt] prose-p:mt-0 prose-strong:text-ink prose-a:text-[#F2994A] !my-0"
                       >
                         <ReactMarkdown
                           remarkPlugins={[remarkGfm, remarkMath]}
                           rehypePlugins={[rehypeKatex]}
                           components={{
-                            // Cấu hình Header theo chuẩn mới
-                            h1: ({ children }) => <h2 id={slugify(String(children))} className="mt-10 mb-4 font-serif font-bold text-2xl not-italic text-ink">{children}</h2>,
-                            h2: ({ children }) => <h2 id={slugify(String(children))} className="mt-8 mb-4 font-serif font-bold italic text-xl text-ink">{children}</h2>,
-                            h3: ({ children }) => <h3 id={slugify(String(children))} className="mt-6 mb-3 font-serif font-normal italic text-lg text-ink/80">{children}</h3>,
+                            // Cấu hình Header trong Markdown
+                            h1: ({ children }) => <h2 id={slugify(String(children))} className="mt-8 mb-2 font-serif font-bold text-2xl not-italic text-ink">{children}</h2>,
+                            h2: ({ children }) => <h2 id={slugify(String(children))} className="mt-8 mb-2 font-serif font-bold italic text-xl text-ink">{children}</h2>,
+                            h3: ({ children }) => <h3 id={slugify(String(children))} className="mt-6 mb-1.5 font-serif font-normal italic text-lg text-ink/80">{children}</h3>,
                             
-                            // Cấu hình Blockquote biến thành Callout Box (Giống ô ATTENTION Hình 2)
+                            // Cấu hình Blockquote biến thành Callout Box
                             blockquote: ({ children }) => (
-                              <blockquote className="border-l-4 border-[#F2994A] bg-[#F2994A]/10 px-5 py-2 rounded-r-xl text-ink/90 not-italic my-6 shadow-sm">
+                              <blockquote className="border-l-4 border-[#F2994A] bg-[#F2994A]/10 px-5 py-2.5 rounded-r-xl text-ink/90 not-italic my-4 shadow-sm">
                                 {children}
                               </blockquote>
                             ),
                             
+                            // CẤU HÌNH TẠO BẢNG (TABLE) CHÍNH XÁC
+                            table: ({ children }) => (
+                              <div className="overflow-x-auto my-5">
+                                <table className="w-full text-left border-collapse border border-line/60 rounded-xl overflow-hidden shadow-sm">
+                                  {children}
+                                </table>
+                              </div>
+                            ),
+                            thead: ({ children }) => <thead className="bg-slate-100/80 border-b border-line/60">{children}</thead>,
+                            th: ({ children }) => <th className="p-3.5 font-sans font-bold text-sm text-ink border-r border-line/60 last:border-0">{children}</th>,
+                            td: ({ children }) => <td className="p-3.5 text-[14.5px] text-ink/80 border-t border-r border-line/40 last:border-r-0 align-top">{children}</td>,
+
                             // Hình ảnh
                             img: ({ src, alt }) => (
                               // eslint-disable-next-line @next/next/no-img-element
@@ -363,7 +365,7 @@ export default function LessonPage() {
                   // 4. Dạng biểu đồ tương tác
                   if (block.type === "interactive_diagram") {
                     return (
-                      <div key={idx} className="w-full aspect-video rounded-2xl border-2 border-dashed border-[#F2994A]/40 bg-[#F2994A]/5 flex flex-col items-center justify-center p-6 text-center group cursor-pointer hover:bg-[#F2994A]/10 transition-colors my-6">
+                      <div key={idx} className="w-full aspect-video rounded-2xl border-2 border-dashed border-[#F2994A]/40 bg-[#F2994A]/5 flex flex-col items-center justify-center p-6 text-center group cursor-pointer hover:bg-[#F2994A]/10 transition-colors my-5">
                         <Box size={32} className="text-[#F2994A] mb-3" />
                         <h4 className="font-bold text-ink mb-1">Interactive Diagram</h4>
                         <p className="text-[12px] text-muted max-w-[250px]">
