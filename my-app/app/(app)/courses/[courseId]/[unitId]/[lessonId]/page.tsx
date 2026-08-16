@@ -1,23 +1,26 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase/client";
-import { ArrowLeft, Clock, Image as ImageIcon, Box } from "lucide-react";
+import { ArrowLeft, Clock, Box } from "lucide-react";
 import Link from "next/link";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
+import { motion, useScroll, useSpring } from "framer-motion"; // IMPORT THÊM ĐỂ LÀM MƯỢT PROGRESS BAR
 import "katex/dist/katex.min.css";
 
 // === ĐỊNH NGHĨA CÁC KIỂU BLOCK ===
 type Block = {
-  type: "markdown" | "image" | "interactive_diagram" | string;
-  data?: string;       // Cho markdown
-  url?: string;        // Cho image
-  caption?: string;    // Cho image
-  diagram_id?: string; // Cho interactive_diagram
+  type: "markdown" | "image" | "interactive_diagram" | "title" | "heading" | string;
+  data?: string;       
+  text?: string;       // Cho title
+  level?: number;      // Cho title (vd: 1, 2, 3)
+  url?: string;        
+  caption?: string;    
+  diagram_id?: string; 
   [key: string]: any;
 };
 
@@ -25,19 +28,25 @@ type LessonDetail = {
   id: string;
   title: string;
   content_type: string;
-  content: any; // Có thể chứa { blocks: [...] } hoặc { body: "..." }
+  content: any;
   est_minutes: number;
   unit_id: string;
 };
 
 type TocItem = { id: string; text: string; level: number };
 
+// FIX: Hàm slugify hỗ trợ chuẩn Tiếng Việt để click mục lục chính xác
 function slugify(text: string) {
   return text
+    .toString()
+    .normalize("NFD") 
+    .replace(/[\u0300-\u036f]/g, "") // Bỏ dấu
     .toLowerCase()
     .trim()
-    .replace(/[^\w\s-]/g, "")
-    .replace(/\s+/g, "-");
+    .replace(/đ/g, "d")
+    .replace(/[^a-z0-9 -]/g, "") 
+    .replace(/\s+/g, "-") 
+    .replace(/-+/g, "-"); 
 }
 
 function extractToc(markdown: string): TocItem[] {
@@ -66,10 +75,14 @@ export default function LessonPage() {
   const [isEnrolled, setIsEnrolled] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [scrollProgress, setScrollProgress] = useState(0);
-  const [needsScroll, setNeedsScroll] = useState(false);
 
-  const contentRef = useRef<HTMLDivElement>(null);
+  // === XỬ LÝ PROGRESS BAR BẰNG FRAMER MOTION ===
+  const { scrollYProgress } = useScroll();
+  const scaleX = useSpring(scrollYProgress, {
+    stiffness: 100,
+    damping: 30,
+    restDelta: 0.001
+  });
 
   useEffect(() => {
     let cancelled = false;
@@ -95,7 +108,6 @@ export default function LessonPage() {
       if (cancelled) return;
 
       if (!enrollment) {
-        // Nếu muốn test nhanh lúc chưa enroll thì cậu có thể tạm set true ở đây
         setIsEnrolled(false); 
         setLoading(false);
         return;
@@ -136,66 +148,41 @@ export default function LessonPage() {
   }, [courseId, lessonId, router]);
 
   // ==========================================
-  // LOGIC XỬ LÝ BLOCK-BASED CONTENT
+  // XỬ LÝ DỮ LIỆU BLOCK & TẠO MỤC LỤC
   // ==========================================
   const blocks: Block[] = useMemo(() => {
     if (!lesson?.content) return [];
     
-    // Nếu db trả về là dạng text JSON (phòng hờ)
     let parsedContent = lesson.content;
     if (typeof parsedContent === "string") {
       try { parsedContent = JSON.parse(parsedContent); } 
       catch (e) { return [{ type: "markdown", data: parsedContent }]; }
     }
 
-    // Nếu cấu trúc là Block-based mới { blocks: [...] }
     if (Array.isArray(parsedContent.blocks)) {
       return parsedContent.blocks;
     }
-    
-    // Nếu là kiểu cũ { body: "..." }
     if (parsedContent.body) {
       return [{ type: "markdown", data: parsedContent.body }];
     }
-
     return [];
   }, [lesson?.content]);
 
-  // Sinh Table of Contents từ TẤT CẢ các khối markdown
   const toc = useMemo(() => {
-    const allMarkdown = blocks
-      .filter((b) => b.type === "markdown")
-      .map((b) => b.data || "")
-      .join("\n\n");
-    return extractToc(allMarkdown);
-  }, [blocks]);
-
-  useEffect(() => {
-    function onScroll() {
-      const el = contentRef.current;
-      if (!el) return;
-
-      const rect = el.getBoundingClientRect();
-      const total = el.scrollHeight - window.innerHeight;
-
-      if (total <= 0) {
-        setNeedsScroll(false);
-        setScrollProgress(0);
-        return;
+    const items: TocItem[] = [];
+    blocks.forEach((b) => {
+      // Bắt cả Block dạng "title" hoặc "heading"
+      if (b.type === "title" || b.type === "heading") {
+        const text = b.data || b.text || "";
+        const level = b.level || 2;
+        if (text) items.push({ id: slugify(text), text, level });
+      } 
+      // Bắt thẻ # trong Markdown
+      else if (b.type === "markdown") {
+        items.push(...extractToc(b.data || ""));
       }
-
-      setNeedsScroll(true);
-      const scrolled = Math.min(Math.max(-rect.top, 0), total);
-      setScrollProgress((scrolled / total) * 100);
-    }
-
-    onScroll();
-    window.addEventListener("scroll", onScroll, { passive: true });
-    window.addEventListener("resize", onScroll);
-    return () => {
-      window.removeEventListener("scroll", onScroll);
-      window.removeEventListener("resize", onScroll);
-    };
+    });
+    return items;
   }, [blocks]);
 
   async function handleDone() {
@@ -274,32 +261,25 @@ export default function LessonPage() {
 
   return (
     <div className="min-h-screen w-full bg-[#F9F9F8]">
-      {/* Scroll Progress Bar */}
-      {needsScroll && (
-        <div className="fixed top-0 left-0 right-0 z-40 h-1 bg-line/40">
-          <div
-            className="h-full bg-accent transition-[width] duration-150 ease-out"
-            style={{ width: `${scrollProgress}%` }}
-          />
-        </div>
-      )}
+      {/* Nâng cấp: Scroll Progress Bar Mượt Mà */}
+      <motion.div
+        className="fixed top-0 left-0 right-0 z-50 h-1 bg-[#F2994A] origin-left"
+        style={{ scaleX }}
+      />
 
       <div className="px-8 py-10 lg:px-16">
         <Link
           href={`/courses/${courseId}`}
-          className="inline-flex items-center gap-2 text-sm font-bold text-muted hover:text-ink transition-colors mb-8"
+          className="inline-flex items-center gap-2 text-[13px] font-bold text-muted hover:text-ink transition-colors mb-8"
         >
           <ArrowLeft size={16} /> Back to {courseTitle || "course"}
         </Link>
 
-        <div
-          ref={contentRef}
-          className="grid grid-cols-1 lg:grid-cols-[1fr_260px] gap-8 items-start max-w-5xl mx-auto"
-        >
+        <div className="grid grid-cols-1 lg:grid-cols-[1fr_260px] gap-8 items-start max-w-5xl mx-auto">
           {/* NỘI DUNG BÀI HỌC CHÍNH */}
           <div className="rounded-[32px] bg-white/60 backdrop-blur-xl border border-white/80 shadow-sm p-8 md:p-12">
             <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-muted mb-4">
-              <Clock size={14} className="text-accent" />
+              <Clock size={14} className="text-[#F2994A]" />
               {lesson.est_minutes} min lesson
             </div>
 
@@ -308,16 +288,28 @@ export default function LessonPage() {
             </h1>
 
             {/* BLOCK RENDERER */}
-            <div className="flex flex-col gap-8">
+            <div className="flex flex-col gap-6">
               {blocks.length > 0 ? (
                 blocks.map((block, idx) => {
                   
-// 1. Dạng văn bản Markdown
+                  // 1. Dạng Title riêng biệt
+                  if (block.type === "title" || block.type === "heading") {
+                    const text = block.data || block.text || "";
+                    const level = block.level || 2;
+                    const Tag = `h${level}` as any;
+                    return (
+                      <Tag key={idx} id={slugify(text)} className={`font-serif text-ink mt-8 mb-3 font-bold ${level === 1 ? 'text-3xl' : level === 2 ? 'text-2xl' : 'text-xl'}`}>
+                        {text}
+                      </Tag>
+                    );
+                  }
+
+                  // 2. Dạng văn bản Markdown (Có format Charter & Justify)
                   if (block.type === "markdown") {
                     return (
                       <div 
                         key={idx} 
-                        className="prose prose-sm md:prose-base max-w-none font-['Charter','Times_New_Roman',serif] text-justify prose-headings:font-sans prose-headings:text-ink prose-p:text-ink/90 prose-p:leading-[1.2] prose-p:mb-[5pt] prose-strong:text-ink prose-a:text-accent"
+                        className="prose prose-sm md:prose-base max-w-none font-['Charter','Times_New_Roman',serif] text-justify prose-headings:font-sans prose-headings:text-ink prose-p:text-ink/90 prose-p:leading-[1.2] prose-p:mb-[5pt] prose-strong:text-ink prose-a:text-[#F2994A]"
                       >
                         <ReactMarkdown
                           remarkPlugins={[remarkGfm, remarkMath]}
@@ -338,7 +330,7 @@ export default function LessonPage() {
                     );
                   }
 
-                  // 2. Dạng hình ảnh chuyên biệt
+                  // 3. Dạng hình ảnh chuyên biệt
                   if (block.type === "image") {
                     return (
                       <figure key={idx} className="my-4">
@@ -357,10 +349,10 @@ export default function LessonPage() {
                     );
                   }
 
-                  // 3. Dạng biểu đồ tương tác
+                  // 4. Dạng biểu đồ tương tác
                   if (block.type === "interactive_diagram") {
                     return (
-                      <div key={idx} className="w-full aspect-video rounded-2xl border-2 border-dashed border-[#F2994A]/40 bg-[#F2994A]/5 flex flex-col items-center justify-center p-6 text-center group cursor-pointer hover:bg-[#F2994A]/10 transition-colors">
+                      <div key={idx} className="w-full aspect-video rounded-2xl border-2 border-dashed border-[#F2994A]/40 bg-[#F2994A]/5 flex flex-col items-center justify-center p-6 text-center group cursor-pointer hover:bg-[#F2994A]/10 transition-colors my-6">
                         <Box size={32} className="text-[#F2994A] mb-3" />
                         <h4 className="font-bold text-ink mb-1">Interactive Diagram</h4>
                         <p className="text-[12px] text-muted max-w-[250px]">
@@ -394,7 +386,7 @@ export default function LessonPage() {
           {toc.length > 0 && (
             <div className="hidden lg:block sticky top-8">
               <div className="rounded-[24px] bg-white/60 backdrop-blur-xl border border-white/80 shadow-sm p-6">
-                <h3 className="text-xs font-bold text-muted uppercase tracking-wider mb-4">
+                <h3 className="text-[11px] font-bold text-muted uppercase tracking-wider mb-4">
                   On this page
                 </h3>
                 <ul className="space-y-3">
@@ -402,7 +394,7 @@ export default function LessonPage() {
                     <li key={item.id} style={{ paddingLeft: (item.level - 1) * 12 }}>
                       <a
                         href={`#${item.id}`}
-                        className="text-[13px] font-medium text-ink/60 hover:text-accent transition-colors block leading-tight"
+                        className="text-[13px] font-medium text-ink/60 hover:text-[#F2994A] transition-colors block leading-tight"
                       >
                         {item.text}
                       </a>
