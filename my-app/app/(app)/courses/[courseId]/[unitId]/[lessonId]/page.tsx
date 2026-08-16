@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase/client";
-import { ArrowLeft, Clock } from "lucide-react";
+import { ArrowLeft, Clock, Image as ImageIcon, Box } from "lucide-react";
 import Link from "next/link";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -11,12 +11,21 @@ import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
 import "katex/dist/katex.min.css";
 
+// === ĐỊNH NGHĨA CÁC KIỂU BLOCK ===
+type Block = {
+  type: "markdown" | "image" | "interactive_diagram" | string;
+  data?: string;       // Cho markdown
+  url?: string;        // Cho image
+  caption?: string;    // Cho image
+  diagram_id?: string; // Cho interactive_diagram
+  [key: string]: any;
+};
+
 type LessonDetail = {
   id: string;
   title: string;
   content_type: string;
-  // FIX: Để content là 'any' để bắt được cả String hoặc Object
-  content: any; 
+  content: any; // Có thể chứa { blocks: [...] } hoặc { body: "..." }
   est_minutes: number;
   unit_id: string;
 };
@@ -69,9 +78,7 @@ export default function LessonPage() {
       setLoading(true);
       setError(null);
 
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+      const { data: { user } } = await supabase.auth.getUser();
 
       if (!user) {
         router.push("/sign-in");
@@ -88,7 +95,8 @@ export default function LessonPage() {
       if (cancelled) return;
 
       if (!enrollment) {
-        setIsEnrolled(false);
+        // Nếu muốn test nhanh lúc chưa enroll thì cậu có thể tạm set true ở đây
+        setIsEnrolled(false); 
         setLoading(false);
         return;
       }
@@ -128,15 +136,39 @@ export default function LessonPage() {
   }, [courseId, lessonId, router]);
 
   // ==========================================
-  // FIX: Lấy dữ liệu an toàn dù nó là chuỗi hay Object
+  // LOGIC XỬ LÝ BLOCK-BASED CONTENT
   // ==========================================
-  const body = useMemo(() => {
-    if (!lesson?.content) return "";
-    if (typeof lesson.content === "string") return lesson.content;
-    return lesson.content.body || "";
+  const blocks: Block[] = useMemo(() => {
+    if (!lesson?.content) return [];
+    
+    // Nếu db trả về là dạng text JSON (phòng hờ)
+    let parsedContent = lesson.content;
+    if (typeof parsedContent === "string") {
+      try { parsedContent = JSON.parse(parsedContent); } 
+      catch (e) { return [{ type: "markdown", data: parsedContent }]; }
+    }
+
+    // Nếu cấu trúc là Block-based mới { blocks: [...] }
+    if (Array.isArray(parsedContent.blocks)) {
+      return parsedContent.blocks;
+    }
+    
+    // Nếu là kiểu cũ { body: "..." }
+    if (parsedContent.body) {
+      return [{ type: "markdown", data: parsedContent.body }];
+    }
+
+    return [];
   }, [lesson?.content]);
 
-  const toc = useMemo(() => extractToc(body), [body]);
+  // Sinh Table of Contents từ TẤT CẢ các khối markdown
+  const toc = useMemo(() => {
+    const allMarkdown = blocks
+      .filter((b) => b.type === "markdown")
+      .map((b) => b.data || "")
+      .join("\n\n");
+    return extractToc(allMarkdown);
+  }, [blocks]);
 
   useEffect(() => {
     function onScroll() {
@@ -164,12 +196,10 @@ export default function LessonPage() {
       window.removeEventListener("scroll", onScroll);
       window.removeEventListener("resize", onScroll);
     };
-  }, [body]);
+  }, [blocks]);
 
   async function handleDone() {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const { data: { user } } = await supabase.auth.getUser();
 
     if (user) {
       await supabase
@@ -179,7 +209,6 @@ export default function LessonPage() {
           { onConflict: "learner_id,lesson_id" }
         );
 
-      // Recompute and save overall course progress.
       const { data: courseUnits } = await supabase
         .from("units")
         .select("id, lessons(id)")
@@ -195,10 +224,9 @@ export default function LessonPage() {
         .eq("learner_id", user.id)
         .in("lesson_id", allLessonIds);
 
-      const progressPct =
-        allLessonIds.length > 0
-          ? Math.round(((completions?.length ?? 0) / allLessonIds.length) * 100)
-          : 0;
+      const progressPct = allLessonIds.length > 0
+        ? Math.round(((completions?.length ?? 0) / allLessonIds.length) * 100)
+        : 0;
 
       await supabase
         .from("enrollments")
@@ -212,7 +240,7 @@ export default function LessonPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen w-full flex items-center justify-center">
+      <div className="min-h-screen w-full flex items-center justify-center bg-[#F9F9F8]">
         <div className="w-8 h-8 border-4 border-line border-t-accent rounded-full animate-spin" />
       </div>
     );
@@ -220,7 +248,7 @@ export default function LessonPage() {
 
   if (!isEnrolled) {
     return (
-      <div className="min-h-screen w-full flex flex-col items-center justify-center gap-4 px-6 text-center">
+      <div className="min-h-screen w-full bg-[#F9F9F8] flex flex-col items-center justify-center gap-4 px-6 text-center">
         <p className="font-serif text-2xl font-semibold text-ink">
           You&apos;re not enrolled in this course
         </p>
@@ -236,7 +264,7 @@ export default function LessonPage() {
 
   if (error || !lesson) {
     return (
-      <div className="min-h-screen w-full flex items-center justify-center">
+      <div className="min-h-screen w-full bg-[#F9F9F8] flex items-center justify-center">
         <p className="text-sm text-muted">
           Couldn&apos;t load this lesson{error ? `: ${error}` : ""}.
         </p>
@@ -268,40 +296,80 @@ export default function LessonPage() {
           ref={contentRef}
           className="grid grid-cols-1 lg:grid-cols-[1fr_260px] gap-8 items-start max-w-5xl mx-auto"
         >
-          {/* Nội dung chính bài học */}
+          {/* NỘI DUNG BÀI HỌC CHÍNH */}
           <div className="rounded-[32px] bg-white/60 backdrop-blur-xl border border-white/80 shadow-sm p-8 md:p-12">
             <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-muted mb-4">
               <Clock size={14} className="text-accent" />
               {lesson.est_minutes} min lesson
             </div>
 
-            <h1 className="font-serif text-3xl md:text-4xl font-bold text-ink leading-tight mb-8">
+            <h1 className="font-serif text-3xl md:text-4xl font-bold text-ink leading-tight mb-10">
               {lesson.title}
             </h1>
 
-            <div className="prose prose-sm md:prose-base max-w-none prose-headings:font-serif prose-headings:text-ink prose-p:text-ink/80 prose-p:leading-7 prose-strong:text-ink prose-a:text-accent">
-              {body ? (
-                <ReactMarkdown
-                  remarkPlugins={[remarkGfm, remarkMath]}
-                  rehypePlugins={[rehypeKatex]}
-                  components={{
-                    h1: ({ children }) => (
-                      <h2 id={slugify(String(children))}>{children}</h2>
-                    ),
-                    h2: ({ children }) => (
-                      <h2 id={slugify(String(children))}>{children}</h2>
-                    ),
-                    h3: ({ children }) => (
-                      <h3 id={slugify(String(children))}>{children}</h3>
-                    ),
-                    img: ({ src, alt }) => (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={src} alt={alt} className="rounded-2xl w-full border border-line/50 shadow-sm my-6" />
-                    ),
-                  }}
-                >
-                  {body}
-                </ReactMarkdown>
+            {/* BLOCK RENDERER */}
+            <div className="flex flex-col gap-8">
+              {blocks.length > 0 ? (
+                blocks.map((block, idx) => {
+                  
+                  // 1. Dạng văn bản Markdown
+                  if (block.type === "markdown") {
+                    return (
+                      <div key={idx} className="prose prose-sm md:prose-base max-w-none prose-headings:font-serif prose-headings:text-ink prose-p:text-ink/80 prose-p:leading-7 prose-strong:text-ink prose-a:text-accent">
+                        <ReactMarkdown
+                          remarkPlugins={[remarkGfm, remarkMath]}
+                          rehypePlugins={[rehypeKatex]}
+                          components={{
+                            h1: ({ children }) => <h2 id={slugify(String(children))}>{children}</h2>,
+                            h2: ({ children }) => <h2 id={slugify(String(children))}>{children}</h2>,
+                            h3: ({ children }) => <h3 id={slugify(String(children))}>{children}</h3>,
+                            img: ({ src, alt }) => (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img src={src} alt={alt} className="rounded-2xl w-full border border-line/50 shadow-sm my-6" />
+                            ),
+                          }}
+                        >
+                          {block.data || ""}
+                        </ReactMarkdown>
+                      </div>
+                    );
+                  }
+
+                  // 2. Dạng hình ảnh chuyên biệt
+                  if (block.type === "image") {
+                    return (
+                      <figure key={idx} className="my-4">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img 
+                          src={block.url} 
+                          alt={block.caption || "Lesson Image"} 
+                          className="w-full rounded-2xl border border-line/60 shadow-sm"
+                        />
+                        {block.caption && (
+                          <figcaption className="text-center text-[12px] text-muted mt-3 font-medium">
+                            {block.caption}
+                          </figcaption>
+                        )}
+                      </figure>
+                    );
+                  }
+
+                  // 3. Dạng biểu đồ tương tác
+                  if (block.type === "interactive_diagram") {
+                    return (
+                      <div key={idx} className="w-full aspect-video rounded-2xl border-2 border-dashed border-[#F2994A]/40 bg-[#F2994A]/5 flex flex-col items-center justify-center p-6 text-center group cursor-pointer hover:bg-[#F2994A]/10 transition-colors">
+                        <Box size={32} className="text-[#F2994A] mb-3" />
+                        <h4 className="font-bold text-ink mb-1">Interactive Diagram</h4>
+                        <p className="text-[12px] text-muted max-w-[250px]">
+                          Diagram ID: <span className="font-mono bg-white px-1 py-0.5 rounded">{block.diagram_id}</span>
+                          <br/> (Will be rendered by Canvas engine)
+                        </p>
+                      </div>
+                    );
+                  }
+
+                  return null;
+                })
               ) : (
                 <div className="py-10 text-center border border-dashed border-line/80 rounded-2xl bg-white/50">
                   <p className="text-muted">This lesson doesn&apos;t have content yet.</p>
