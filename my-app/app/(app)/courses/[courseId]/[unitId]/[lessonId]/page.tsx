@@ -304,20 +304,31 @@ export default function LessonPage() {
                     );
                   }
 
-                  // 2. Dạng văn bản Markdown (Có format Charter & Justify)
+                  // 1. Dạng văn bản Markdown (Đã nâng cấp Header, Table & Callout)
                   if (block.type === "markdown") {
                     return (
                       <div 
                         key={idx} 
-                        className="prose prose-sm md:prose-base max-w-none font-['Charter','Times_New_Roman',serif] text-justify prose-headings:font-sans prose-headings:text-ink prose-p:text-ink/90 prose-p:leading-[1.2] prose-p:mb-[5pt] prose-strong:text-ink prose-a:text-[#F2994A]"
+                        // CSS định dạng tổng thể, lề đoạn văn 5pt, khoảng cách dòng 1.2, và làm đẹp Bảng
+                        className="prose prose-sm md:prose-base max-w-none font-['Charter','Times_New_Roman',serif] text-justify prose-p:text-ink/90 prose-p:leading-[1.2] prose-p:mb-[5pt] prose-strong:text-ink prose-a:text-[#F2994A] prose-table:border prose-table:border-line/60 prose-th:bg-slate-100/80 prose-th:p-3 prose-th:text-left prose-td:p-3 prose-td:border-t prose-td:border-line/40"
                       >
                         <ReactMarkdown
                           remarkPlugins={[remarkGfm, remarkMath]}
                           rehypePlugins={[rehypeKatex]}
                           components={{
-                            h1: ({ children }) => <h2 id={slugify(String(children))} className="mt-8 mb-4">{children}</h2>,
-                            h2: ({ children }) => <h2 id={slugify(String(children))} className="mt-8 mb-4">{children}</h2>,
-                            h3: ({ children }) => <h3 id={slugify(String(children))} className="mt-6 mb-3">{children}</h3>,
+                            // Cấu hình Header theo chuẩn mới
+                            h1: ({ children }) => <h2 id={slugify(String(children))} className="mt-10 mb-4 font-serif font-bold text-2xl not-italic text-ink">{children}</h2>,
+                            h2: ({ children }) => <h2 id={slugify(String(children))} className="mt-8 mb-4 font-serif font-bold italic text-xl text-ink">{children}</h2>,
+                            h3: ({ children }) => <h3 id={slugify(String(children))} className="mt-6 mb-3 font-serif font-normal italic text-lg text-ink/80">{children}</h3>,
+                            
+                            // Cấu hình Blockquote biến thành Callout Box (Giống ô ATTENTION Hình 2)
+                            blockquote: ({ children }) => (
+                              <blockquote className="border-l-4 border-[#F2994A] bg-[#F2994A]/10 px-5 py-2 rounded-r-xl text-ink/90 not-italic my-6 shadow-sm">
+                                {children}
+                              </blockquote>
+                            ),
+                            
+                            // Hình ảnh
                             img: ({ src, alt }) => (
                               // eslint-disable-next-line @next/next/no-img-element
                               <img src={src} alt={alt} className="rounded-2xl w-full border border-line/50 shadow-sm my-6" />
