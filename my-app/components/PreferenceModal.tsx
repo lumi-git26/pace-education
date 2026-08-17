@@ -7,11 +7,10 @@ import {
   X, 
   Calendar as CalendarIcon, 
   AlertCircle, 
-  Settings2, 
-  CheckSquare, 
-  Square 
+  Settings2
 } from "lucide-react";
 import { supabase } from "@/lib/supabase/client";
+import { generateCourseSchedule } from "@/lib/scheduling"; 
 
 const TIME_ROWS = [
   { key: "morning", label: "Morning", time: "7:00 - 11:00" },
@@ -146,12 +145,20 @@ export default function PreferenceModal({
       lessons_per_week: lessonsPerWeek,
     });
 
-    setSaving(false);
     if (insertErr) {
       setError(insertErr.message);
+      setSaving(false);
       return;
     }
 
+    await generateCourseSchedule(
+      user.id,
+      courseId,
+      availability,
+      lessonsPerWeek
+    );
+
+    setSaving(false);
     onSaved?.();
     onClose();
   }
@@ -160,6 +167,82 @@ export default function PreferenceModal({
 
   return createPortal(
     <AnimatePresence>
+      <style>{`
+        /* CSS tuỳ chỉnh cho Checkbox Uiverse */
+        .ios-checkbox {
+          --checkbox-size: 22px;
+          --checkbox-color: #F2994A; /* Màu cam chủ đạo */
+          --checkbox-border: #D1D5DB; /* Viền xám nhạt khi chưa check */
+          position: relative;
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          cursor: pointer;
+          user-select: none;
+          -webkit-tap-highlight-color: transparent;
+        }
+        .ios-checkbox input {
+          display: none;
+        }
+        .checkbox-wrapper {
+          position: relative;
+          width: var(--checkbox-size);
+          height: var(--checkbox-size);
+          border-radius: 6px;
+          transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+          flex-shrink: 0;
+        }
+        .checkbox-bg {
+          position: absolute;
+          inset: 0;
+          border-radius: 6px;
+          border: 2px solid var(--checkbox-border);
+          background: white;
+          transition: all 0.2s ease;
+        }
+        .checkbox-icon {
+          position: absolute;
+          inset: 0;
+          margin: auto;
+          width: 70%;
+          height: 70%;
+          color: white;
+          transform: scale(0);
+          transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .check-path {
+          stroke-dasharray: 40;
+          stroke-dashoffset: 40;
+          transition: stroke-dashoffset 0.3s cubic-bezier(0.4, 0, 0.2, 1) 0.05s;
+        }
+        /* Checked State */
+        .ios-checkbox input:checked + .checkbox-wrapper .checkbox-bg {
+          background: var(--checkbox-color);
+          border-color: var(--checkbox-color);
+        }
+        .ios-checkbox input:checked + .checkbox-wrapper .checkbox-icon {
+          transform: scale(1);
+        }
+        .ios-checkbox input:checked + .checkbox-wrapper .check-path {
+          stroke-dashoffset: 0;
+        }
+        /* Hover/Active Effects */
+        .ios-checkbox:hover .checkbox-wrapper {
+          transform: scale(1.05);
+        }
+        .ios-checkbox:active .checkbox-wrapper {
+          transform: scale(0.95);
+        }
+        /* Animation Bounce */
+        @keyframes checkbox-bounce {
+          0%, 100% { transform: scale(1); }
+          50% { transform: scale(1.15); }
+        }
+        .ios-checkbox input:checked + .checkbox-wrapper {
+          animation: checkbox-bounce 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+      `}</style>
+      
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
@@ -174,7 +257,6 @@ export default function PreferenceModal({
           exit={{ opacity: 0, scale: 0.96 }}
           transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
           onClick={(e: React.MouseEvent) => e.stopPropagation()}
-          // Vibe Minimal: Nền giấy F9F9F8, shadow nhẹ, viền mỏng
           className="relative flex flex-col md:flex-row bg-[#F9F9F8] rounded-[32px] shadow-[0_8px_30px_rgb(0,0,0,0.06)] overflow-hidden max-h-[90vh] md:max-h-[85vh] w-full max-w-fit mx-auto border border-line/60 custom-scrollbar"
         >
           {/* Nút tắt Mobile */}
@@ -214,7 +296,6 @@ export default function PreferenceModal({
                     {DAY_COLS.map((d) => (
                       <th
                         key={d.key}
-                        // Set width cố định cho header để bảng ko bị bóp
                         className={`w-[52px] pb-3 text-[14px] font-bold text-center ${
                           d.isWeekend ? "text-[#E07A5F]" : "text-ink"
                         }`}
@@ -242,7 +323,6 @@ export default function PreferenceModal({
                             <button
                               onClick={() => toggleSlot(d.key, row.key)}
                               aria-label={`${row.label} ${d.label}`}
-                              // Kích thước vuông vức cố định (w-11 h-11), ko dùng w-full nữa
                               className={`w-11 h-11 mx-auto rounded-[14px] transition-all duration-200 border ${
                                 active
                                   ? "bg-[#F2994A] border-[#F2994A]"
@@ -258,27 +338,27 @@ export default function PreferenceModal({
               </table>
             </div>
 
-            {/* Deadline Checkbox */}
+            {/* ======================= UI MỚI CỦA CHECKBOX ======================= */}
             <div className="flex justify-center mb-10">
-              <label className="flex items-center gap-3 cursor-pointer group">
-                <div className={`flex items-center justify-center transition-colors ${hasDeadline ? 'text-[#F2994A]' : 'text-muted group-hover:text-ink'}`}>
-                  {hasDeadline ? (
-                    <CheckSquare size={20} className="fill-[#F2994A] text-white rounded-[4px]" />
-                  ) : (
-                    <Square size={20} className="border-line rounded-[4px]" />
-                  )}
-                </div>
-                <span className="text-[15px] font-medium text-ink">
-                  Set a deadline to this course?
-                </span>
+              <label className="ios-checkbox">
                 <input
                   type="checkbox"
-                  className="hidden"
                   checked={hasDeadline}
                   onChange={handleToggleDeadline}
                 />
+                <div className="checkbox-wrapper">
+                  <div className="checkbox-bg"></div>
+                  <svg className="checkbox-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                    <path className="check-path" d="M20 6L9 17l-5-5" />
+                  </svg>
+                </div>
+                <span className="text-[15px] font-medium text-ink transition-colors group-hover:text-ink/80">
+                  Set a deadline to this course?
+                </span>
               </label>
             </div>
+
+            {error && <p className="text-sm text-red-600 mb-4 text-center">{error}</p>}
 
             {/* Action Buttons */}
             <div className="flex justify-center gap-4 mt-auto">
@@ -306,7 +386,6 @@ export default function PreferenceModal({
                 animate={{ width: "auto", opacity: 1 }}
                 exit={{ width: 0, opacity: 0 }}
                 transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
-                // Vibe minimal: Cùng màu nền, ngăn cách bằng đường kẻ mỏng
                 className="border-t md:border-t-0 md:border-l border-line/60 bg-transparent overflow-hidden shrink-0"
               >
                 <div className="w-full md:w-[340px] p-6 md:p-10 flex flex-col h-full">

@@ -390,7 +390,7 @@ export default function LessonPage() {
                 onClick={handleDone}
                 className="w-full bg-ink text-white rounded-full py-4 text-sm font-semibold hover:bg-ink/80 transition-all shadow-md hover:shadow-lg"
               >
-                Mark as Done & Continue
+                Continue
               </button>
             </div>
           </div>
