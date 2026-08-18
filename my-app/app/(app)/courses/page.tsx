@@ -147,7 +147,7 @@ export default function CoursesPage() {
           {loading ? (
             <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
               {[...Array(4)].map((_, i) => (
-                <div key={i} className="h-56 animate-pulse rounded-[32px] border border-line bg-white/40" />
+                <div key={i} className="h-[260px] animate-pulse rounded-[32px] border border-line bg-white/40" />
               ))}
             </div>
           ) : tab === "classes" ? (
@@ -167,19 +167,22 @@ export default function CoursesPage() {
                   <div
                     key={c.id}
                     onClick={() => router.push(`/classroom/${c.id}`)}
-                    className="h-56 rounded-[32px] border border-indigo-200 bg-gradient-to-br from-indigo-50 to-white p-6 shadow-sm hover:shadow-md transition-all cursor-pointer flex flex-col justify-between"
+                    className="h-[260px] rounded-[32px] border border-indigo-200 bg-gradient-to-br from-indigo-50 to-white p-6 shadow-sm hover:shadow-md transition-all cursor-pointer flex flex-col justify-between"
                   >
                     <div>
                       {c.subjectCode && (
-                        <span className="text-[10px] font-bold text-indigo-600 uppercase tracking-wider">
+                        <span className="text-[10px] font-bold text-indigo-600 uppercase tracking-wider mb-2 block">
                           {c.subjectCode}
                         </span>
                       )}
-                      <h3 className="font-serif text-[20px] font-bold text-ink mt-1">
+                      <h3 
+                        className="font-serif text-[20px] font-bold text-ink mt-1 line-clamp-2"
+                        title={c.title}
+                      >
                         {c.title}
                       </h3>
                     </div>
-                    <span className="text-xs font-semibold text-indigo-600">
+                    <span className="text-xs font-semibold text-indigo-600 shrink-0 mt-4">
                       Live Classroom
                     </span>
                   </div>
@@ -203,17 +206,20 @@ export default function CoursesPage() {
                 <div
                   key={course.id}
                   onClick={() => router.push(`/courses/${course.id}`)}
-                  className="group relative flex flex-col justify-between h-56 rounded-[32px] border border-white/60 bg-white/40 backdrop-blur-2xl p-6 shadow-sm hover:shadow-md transition-all cursor-pointer"
+                  className="group relative flex flex-col justify-between h-[260px] rounded-[32px] border border-white/60 bg-white/40 backdrop-blur-2xl p-6 shadow-sm hover:shadow-md transition-all cursor-pointer"
                 >
-                  <div>
-                    <div className="w-12 h-12 rounded-full bg-gradient-to-tr from-accent/20 to-accent/40 flex items-center justify-center text-accent font-serif font-bold text-lg mb-4 border border-white">
+                  <div className="flex flex-col">
+                    <div className="w-12 h-12 rounded-full bg-gradient-to-tr from-accent/20 to-accent/40 flex items-center justify-center text-accent font-serif font-bold text-lg mb-4 border border-white shrink-0">
                       {course.title.charAt(0)}
                     </div>
-                    <h3 className="font-serif text-[20px] font-bold text-ink leading-tight group-hover:text-accent transition-colors line-clamp-2">
+                    <h3 
+                      className="font-serif text-[20px] font-bold text-ink leading-tight group-hover:text-accent transition-colors line-clamp-2"
+                      title={course.title}
+                    >
                       {course.title}
                     </h3>
                   </div>
-                  <div className="mt-4">
+                  <div className="mt-4 shrink-0">
                     <div className="flex justify-between items-center text-xs font-bold text-muted mb-2 uppercase tracking-wider">
                       <span>Progress</span>
                       <span className="text-accent">{course.progress}%</span>
