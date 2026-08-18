@@ -299,42 +299,46 @@ export default function LessonPage() {
                     return (
                       <div 
                         key={idx} 
-                        // Tinh chỉnh lề đoạn văn, loại bỏ !my-0 thừa để nó ôm sát nội dung
-                        className="prose prose-sm md:prose-base max-w-none font-['Charter','Times_New_Roman',serif] text-justify prose-p:text-ink/90 prose-p:leading-[1.2] prose-p:mb-[5pt] prose-p:mt-0 prose-strong:text-ink prose-a:text-[#F2994A] !my-0"
+                        className={[
+                          "prose prose-base md:prose-lg max-w-[720px] mx-auto", // Giới hạn chiều rộng đọc như trang báo
+                          "font-['Charter','Times_New_Roman',serif] text-left", // Đổi sang căn trái (Ragged right)
+                          "prose-p:text-ink/85 prose-p:leading-[1.7] prose-p:mb-7 prose-p:mt-0", // Nới lỏng khoảng cách dòng lên 1.7
+                          "prose-strong:text-ink prose-strong:font-bold", // Chữ in đậm nổi bật hẳn
+                          "prose-a:text-[#F2994A] prose-a:no-underline hover:prose-a:underline prose-a:underline-offset-4", // Link màu cam, hover mới gạch chân
+                          "prose-li:text-ink/85 prose-li:leading-[1.7]",
+                          "!my-0"
+                        ].join(" ")}
                       >
                         <ReactMarkdown
                           remarkPlugins={[remarkGfm, remarkMath]}
                           rehypePlugins={[rehypeKatex]}
                           components={{
-                            // Cấu hình Header trong Markdown
-                            h1: ({ children }) => <h2 id={slugify(String(children))} className="mt-8 mb-2 font-serif font-bold text-2xl not-italic text-ink">{children}</h2>,
-                            h2: ({ children }) => <h2 id={slugify(String(children))} className="mt-8 mb-2 font-serif font-bold italic text-xl text-ink">{children}</h2>,
-                            h3: ({ children }) => <h3 id={slugify(String(children))} className="mt-6 mb-1.5 font-serif font-normal italic text-lg text-ink/80">{children}</h3>,
+                            // Header bóp khoảng cách chữ lại một chút (tracking-tight) cho giống báo in
+                            h1: ({ children }) => <h2 id={slugify(String(children))} className="mt-12 mb-4 font-serif font-bold text-3xl not-italic text-ink tracking-tight">{children}</h2>,
+                            h2: ({ children }) => <h2 id={slugify(String(children))} className="mt-10 mb-4 font-serif font-bold italic text-2xl text-ink tracking-tight">{children}</h2>,
+                            h3: ({ children }) => <h3 id={slugify(String(children))} className="mt-8 mb-3 font-serif font-medium italic text-xl text-ink/80">{children}</h3>,
                             
-                            // Cấu hình Blockquote biến thành Callout Box
+                            // Quote kiểu Medium: Đường viền trái mỏng, chữ to hơn một chút và in nghiêng
                             blockquote: ({ children }) => (
-                              <blockquote className="border-l-4 border-[#F2994A] bg-[#F2994A]/10 px-5 py-2.5 rounded-r-xl text-ink/90 not-italic my-4 shadow-sm">
+                              <blockquote className="border-l-[3px] border-[#F2994A] pl-6 py-1 my-8 text-xl font-serif italic text-ink/70">
                                 {children}
                               </blockquote>
                             ),
                             
-                            // CẤU HÌNH TẠO BẢNG (TABLE) CHÍNH XÁC
+                            // Table phong cách Notion/Stripe: Viền mỏng, chữ nhỏ gọn
                             table: ({ children }) => (
-                              <div className="overflow-x-auto my-5">
-                                <table className="w-full text-left border-collapse border border-line/60 rounded-xl overflow-hidden shadow-sm">
+                              <div className="overflow-x-auto my-8">
+                                <table className="w-full text-left border-collapse font-sans text-[15px]">
                                   {children}
                                 </table>
                               </div>
                             ),
-                            thead: ({ children }) => <thead className="bg-slate-100/80 border-b border-line/60">{children}</thead>,
-                            th: ({ children }) => <th className="p-3.5 font-sans font-bold text-sm text-ink border-r border-line/60 last:border-0">{children}</th>,
-                            td: ({ children }) => <td className="p-3.5 text-[14.5px] text-ink/80 border-t border-r border-line/40 last:border-r-0 align-top">{children}</td>,
-
-                            // Hình ảnh
-                            img: ({ src, alt }) => (
-                              // eslint-disable-next-line @next/next/no-img-element
-                              <img src={src} alt={alt} className="rounded-2xl w-full border border-line/50 shadow-sm my-6" />
-                            ),
+                            thead: ({ children }) => <thead className="border-b-2 border-ink/10 text-ink">{children}</thead>,
+                            th: ({ children }) => <th className="p-4 font-semibold">{children}</th>,
+                            td: ({ children }) => <td className="p-4 text-ink/75 border-b border-line/40 align-top">{children}</td>,
+                            
+                            // Phân cách đoạn (Divider ***)
+                            hr: () => <hr className="my-12 border-none text-center text-ink/30 text-xl font-serif after:content-['*_*_*']" />
                           }}
                         >
                           {block.data || ""}
