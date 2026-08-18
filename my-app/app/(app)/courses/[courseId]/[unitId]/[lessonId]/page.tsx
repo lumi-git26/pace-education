@@ -294,51 +294,44 @@ export default function LessonPage() {
                     if (level >= 3) return <h3 key={idx} id={slugify(text)} className="mt-6 mb-1.5 font-serif font-normal italic text-lg text-ink/80">{text}</h3>;
                   }
 
-                  // 2. Dạng văn bản Markdown
+                  // 1. Dạng văn bản Markdown (Chuẩn phong cách Giáo trình/Editorial)
                   if (block.type === "markdown") {
                     return (
                       <div 
                         key={idx} 
-                        className={[
-                          "prose prose-base md:prose-lg max-w-[720px] mx-auto", // Giới hạn chiều rộng đọc như trang báo
-                          "font-['Charter','Times_New_Roman',serif] text-left", // Đổi sang căn trái (Ragged right)
-                          "prose-p:text-ink/85 prose-p:leading-[1.7] prose-p:mb-7 prose-p:mt-0", // Nới lỏng khoảng cách dòng lên 1.7
-                          "prose-strong:text-ink prose-strong:font-bold", // Chữ in đậm nổi bật hẳn
-                          "prose-a:text-[#F2994A] prose-a:no-underline hover:prose-a:underline prose-a:underline-offset-4", // Link màu cam, hover mới gạch chân
-                          "prose-li:text-ink/85 prose-li:leading-[1.7]",
-                          "!my-0"
-                        ].join(" ")}
+                        className="prose prose-base md:prose-lg max-w-[760px] mx-auto font-['Charter','Times_New_Roman',serif] text-left prose-p:text-ink/90 prose-p:leading-[1.7] prose-p:mb-5 prose-strong:text-ink prose-strong:font-bold !my-0"
                       >
                         <ReactMarkdown
                           remarkPlugins={[remarkGfm, remarkMath]}
                           rehypePlugins={[rehypeKatex]}
                           components={{
-                            // Header bóp khoảng cách chữ lại một chút (tracking-tight) cho giống báo in
-                            h1: ({ children }) => <h2 id={slugify(String(children))} className="mt-12 mb-4 font-serif font-bold text-3xl not-italic text-ink tracking-tight">{children}</h2>,
-                            h2: ({ children }) => <h2 id={slugify(String(children))} className="mt-10 mb-4 font-serif font-bold italic text-2xl text-ink tracking-tight">{children}</h2>,
-                            h3: ({ children }) => <h3 id={slugify(String(children))} className="mt-8 mb-3 font-serif font-medium italic text-xl text-ink/80">{children}</h3>,
+                            // Header: Cỡ chữ cân đối, màu sắc trang nhã
+                            h1: ({ children }) => <h2 id={slugify(String(children))} className="mt-10 mb-4 font-serif font-bold text-2xl text-[#1E3A8A] tracking-tight">{children}</h2>,
+                            h2: ({ children }) => <h2 id={slugify(String(children))} className="mt-8 mb-3 font-serif font-bold text-xl text-[#1E3A8A] tracking-tight">{children}</h2>,
+                            h3: ({ children }) => <h3 id={slugify(String(children))} className="mt-6 mb-2 font-serif font-semibold text-lg text-ink/90">{children}</h3>,
                             
-                            // Quote kiểu Medium: Đường viền trái mỏng, chữ to hơn một chút và in nghiêng
+                            // Callout Box: Giống hộp ATTENTION màu cát trong PDF (chữ đứng thẳng, nền kem nhạt)
                             blockquote: ({ children }) => (
-                              <blockquote className="border-l-[3px] border-[#F2994A] pl-6 py-1 my-8 text-xl font-serif italic text-ink/70">
+                              <div className="my-6 rounded-xl border border-amber-200/80 bg-[#FFFBEB] px-5 py-4 text-[15px] font-sans leading-relaxed text-amber-950 shadow-sm not-italic">
                                 {children}
-                              </blockquote>
+                              </div>
                             ),
                             
-                            // Table phong cách Notion/Stripe: Viền mỏng, chữ nhỏ gọn
+                            // Bảng (Table): Header xanh thẫm chữ trắng chuẩn giáo trình
                             table: ({ children }) => (
-                              <div className="overflow-x-auto my-8">
-                                <table className="w-full text-left border-collapse font-sans text-[15px]">
+                              <div className="overflow-x-auto my-6 rounded-xl border border-line/60 shadow-sm">
+                                <table className="w-full text-left border-collapse font-sans text-[14px]">
                                   {children}
                                 </table>
                               </div>
                             ),
-                            thead: ({ children }) => <thead className="border-b-2 border-ink/10 text-ink">{children}</thead>,
-                            th: ({ children }) => <th className="p-4 font-semibold">{children}</th>,
-                            td: ({ children }) => <td className="p-4 text-ink/75 border-b border-line/40 align-top">{children}</td>,
+                            thead: ({ children }) => <thead className="bg-[#1E293B] text-white font-semibold">{children}</thead>,
+                            th: ({ children }) => <th className="p-3.5 border-r border-slate-700 last:border-r-0 font-medium tracking-wide">{children}</th>,
+                            tbody: ({ children }) => <tbody className="divide-y divide-line/40 bg-white">{children}</tbody>,
+                            td: ({ children }) => <td className="p-3.5 text-ink/85 align-top border-r border-line/30 last:border-r-0 leading-relaxed">{children}</td>,
                             
-                            // Phân cách đoạn (Divider ***)
-                            hr: () => <hr className="my-12 border-none text-center text-ink/30 text-xl font-serif after:content-['*_*_*']" />
+                            // Đường kẻ ngăn cách trang nhã
+                            hr: () => <hr className="my-8 border-t border-line/60" />
                           }}
                         >
                           {block.data || ""}
