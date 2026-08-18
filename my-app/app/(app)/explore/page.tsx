@@ -2,19 +2,17 @@
 
 import { useEffect, useMemo, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { Search } from "lucide-react";
+import { Search, ChevronRight, GraduationCap } from "lucide-react";
 import { supabase } from "@/lib/supabase/client";
 import CourseCard, { CourseCardData } from "@/components/CourseCard";
 import { motion, AnimatePresence } from "framer-motion";
 
-// 1. Đổi "recent" thành "all", và "classrooms" có thể giữ key nhưng đổi label
-type Tab = "all" | "recommend" | "trending" | "classrooms";
+type Tab = "all" | "recommend" | "trending";
 
 const TABS: { key: Tab; label: string }[] = [
   { key: "all", label: "All" },
   { key: "recommend", label: "Recommend" },
   { key: "trending", label: "Trending" },
-  { key: "classrooms", label: "Classroom" },
 ];
 
 const LEARNING_TOPICS = ["IELTS", "Finance", "English", "Spanish", "Data Analysis"];
@@ -54,12 +52,18 @@ export default function ExplorePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   
-  // Mặc định hiển thị tab All
   const [tab, setTab] = useState<Tab>("all");
   const [query, setQuery] = useState("");
+  
+  // State quản lý Search Suggestion (Pop-up dropdown)
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
   const [isScrolled, setIsScrolled] = useState(false);
   const searchBarRef = useRef<HTMLDivElement>(null);
+  
+  // Ref để cuộn xuống khu vực hiển thị danh sách khóa học
+  const resultsAreaRef = useRef<HTMLDivElement>(null);
 
   const [text, setText] = useState("");
   const [isDeleting, setIsDeleting] = useState(false);
@@ -103,12 +107,12 @@ export default function ExplorePage() {
       setLoading(true);
       setError(null);
 
-      // 1. Lấy dữ liệu Courses
+      // 1. CHỈ LẤY CÁC KHÓA HỌC CÓ STATUS = "published"
       const { data: courseRows, error: courseErr } = await supabase
         .from("courses")
         .select("id, title, description, status, created_at, profiles(full_name)")
-        .eq("status", "published")
-        .order("created_at", { ascending: false }); // Đã tự động sort mới nhất lên đầu
+        .eq("status", "published") 
+        .order("created_at", { ascending: false });
 
       if (cancelled) return;
 
@@ -216,11 +220,42 @@ export default function ExplorePage() {
     return () => observer.disconnect();
   }, []);
 
+  // Tắt Suggestion dropdown khi click ra ngoài ô Search
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (searchBarRef.current && !searchBarRef.current.contains(event.target as Node)) {
+        setShowSuggestions(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+
+  // Lọc danh sách Gợi ý (Suggestions) khi đang gõ text
+  const searchSuggestions = useMemo(() => {
+    if (!query.trim()) return [];
+    return courses
+      .filter((c) => c.title.toLowerCase().includes(query.toLowerCase()))
+      .slice(0, 5); // Chỉ hiện tối đa 5 suggestion
+  }, [courses, query]);
+
+  // Hành động khi nhấn Search (Enter hoặc click Icon kính lúp)
   function handleSearchSubmit() {
     pushRecentSearch(query);
+    setShowSuggestions(false);
+    
+    // Tự động cuộn mượt mà xuống khu vực "All | Recommend | Trending"
+    if (resultsAreaRef.current) {
+      const topPosition = resultsAreaRef.current.getBoundingClientRect().top + window.scrollY - 100; // Trừ hao khoảng Header
+      window.scrollTo({
+        top: topPosition,
+        behavior: 'smooth'
+      });
+    }
   }
 
-  // Lọc dữ liệu Khóa học (Đã cập nhật logic cho tab "all")
+  // Lọc dữ liệu Khóa học cho Grid bên dưới (Dựa theo Query và Tab)
   const visibleCourses = useMemo(() => {
     let list = courses.filter((c) =>
       c.title.toLowerCase().includes(query.toLowerCase())
@@ -247,27 +282,33 @@ export default function ExplorePage() {
           .sort((a, b) => (b.enrolledCount ?? 0) - (a.enrolledCount ?? 0));
       }
     }
-    // Nếu tab === "all", list sẽ giữ nguyên (chỉ bị lọc bởi query tìm kiếm) 
-    // và mặc định đã được sort descending theo created_at từ Supabase.
-
     return list;
   }, [courses, query, tab]);
 
-  // Lọc dữ liệu Lớp học
+  // Lọc dữ liệu Lớp học (Chỉ hiện trong tab All)
   const visibleClassrooms = useMemo(() => {
+    if (tab !== "all") return [];
     return classrooms.filter(
       (c) =>
         c.title.toLowerCase().includes(query.toLowerCase()) ||
         (c.subject_code && c.subject_code.toLowerCase().includes(query.toLowerCase()))
     );
-  }, [classrooms, query]);
+  }, [classrooms, query, tab]);
 
   function renderSearchInput(size: "large" | "small") {
     return (
-      <>
+      <div className="relative w-full">
         <input
+          ref={size === "large" ? searchInputRef : null}
           value={query}
-          onChange={(e) => setQuery(e.target.value)}
+          onChange={(e) => {
+            setQuery(e.target.value);
+            if (e.target.value.trim() !== "") setShowSuggestions(true);
+            else setShowSuggestions(false);
+          }}
+          onFocus={() => {
+            if (query.trim() !== "") setShowSuggestions(true);
+          }}
           placeholder="Tìm kiếm khóa học hoặc lớp học..."
           className={`w-full rounded-pill border border-line bg-white/60 backdrop-blur-xl text-ink outline-none placeholder:text-muted focus:border-accent shadow-sm transition-all hover:shadow-md ${
             size === "large" ? "py-4 pl-8 pr-16 text-lg" : "py-2.5 pl-5 pr-12 text-sm"
@@ -276,13 +317,60 @@ export default function ExplorePage() {
         <button
           type="submit"
           aria-label="Search"
-          className={`absolute top-1/2 flex -translate-y-1/2 items-center justify-center rounded-full bg-accent text-white transition-transform hover:scale-105 active:scale-95 cursor-pointer ${
+          className={`absolute top-1/2 flex -translate-y-1/2 items-center justify-center rounded-full bg-accent text-white transition-transform hover:scale-105 active:scale-95 cursor-pointer z-10 ${
             size === "large" ? "right-2.5 h-11 w-11" : "right-1.5 h-8 w-8"
           }`}
         >
           <Search size={size === "large" ? 20 : 16} />
         </button>
-      </>
+
+        {/* ======================= SUGGESTION DROPDOWN ======================= */}
+        <AnimatePresence>
+          {size === "large" && showSuggestions && searchSuggestions.length > 0 && (
+            <motion.div 
+              initial={{ opacity: 0, y: 10, scale: 0.98 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 10, scale: 0.98 }}
+              transition={{ duration: 0.2 }}
+              className="absolute top-[calc(100%+8px)] left-0 w-full bg-white/95 backdrop-blur-2xl border border-line/60 rounded-[24px] shadow-[0_20px_40px_rgb(0,0,0,0.08)] overflow-hidden z-[100]"
+            >
+              <div className="flex flex-col py-2">
+                <p className="px-5 py-2 text-[10px] font-bold text-muted uppercase tracking-wider">
+                  Suggested Courses
+                </p>
+                {searchSuggestions.map((course) => (
+                  <button
+                    key={course.id}
+                    onClick={() => router.push(`/courses/${course.id}`)}
+                    className="flex items-center justify-between px-5 py-3 hover:bg-slate-50 transition-colors w-full text-left group"
+                  >
+                    {/* Bên Trái: Tên Khóa Học */}
+                    <div className="flex items-center gap-3 min-w-0 pr-4">
+                      <div className="w-8 h-8 rounded-lg bg-ink/5 flex items-center justify-center shrink-0 group-hover:bg-accent/10 group-hover:text-accent transition-colors">
+                        <Search size={14} className="text-muted group-hover:text-accent" />
+                      </div>
+                      <span className="font-semibold text-ink text-[15px] truncate group-hover:text-accent transition-colors">
+                        {course.title}
+                      </span>
+                    </div>
+
+                    {/* Bên Phải: Giảng Viên & Số học sinh */}
+                    <div className="flex items-center gap-4 shrink-0 text-[12px] text-muted font-medium">
+                      <span className="flex items-center gap-1">
+                        <GraduationCap size={14} />
+                        {course.enrolledCount} enrolled
+                      </span>
+                      <span className="w-1 h-1 rounded-full bg-line/80" />
+                      <span>{course.publisherName}</span>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+        {/* ================================================================= */}
+      </div>
     );
   }
 
@@ -352,7 +440,7 @@ export default function ExplorePage() {
           </div>
         </h1>
 
-        <div ref={searchBarRef} className="w-full max-w-[760px]">
+        <div ref={searchBarRef} className="w-full max-w-[760px] relative">
           <form
             onSubmit={(e) => {
               e.preventDefault();
@@ -366,13 +454,19 @@ export default function ExplorePage() {
       </div>
 
       {/* Main Content (Tabs + Grid) */}
-      <div className="relative z-10 pt-[88vh] px-6 w-full max-w-[1200px] mx-auto pb-32">
+      <div 
+        ref={resultsAreaRef} // Đánh dấu Scroll Target
+        className="relative z-10 pt-[88vh] px-6 w-full max-w-[1200px] mx-auto pb-32"
+      >
         <div className="sticky top-[80px] z-40 bg-[#F9F9F8]/90 backdrop-blur-md pt-4 pb-0 mb-8 -mx-6 px-6 border-b border-line/80">
           <div className="flex items-center gap-10 pb-3">
             {TABS.map(({ key, label }) => (
               <button
                 key={key}
-                onClick={() => setTab(key)}
+                onClick={() => {
+                  setTab(key);
+                  setQuery(""); // Clear search when changing tab
+                }}
                 className="relative flex flex-col items-center pb-3 text-[15px] font-semibold transition-colors"
               >
                 <span
@@ -403,6 +497,7 @@ export default function ExplorePage() {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -15 }}
               transition={{ duration: 0.2, ease: "easeOut" }}
+              className="flex flex-col gap-10"
             >
               {/* === Skeleton Loading === */}
               {loading && (
@@ -424,86 +519,108 @@ export default function ExplorePage() {
                 </div>
               )}
 
-              {/* === Empty State (Courses) === */}
-              {!loading && !error && tab !== "classrooms" && visibleCourses.length === 0 && (
-                <div className="rounded-[32px] border border-line bg-white/80 backdrop-blur-md p-14 text-center text-sm text-muted shadow-sm">
-                  <p className="text-xl mb-3 text-ink font-medium">
-                    {tab === "all" && "No courses found 🌱"}
-                    {tab === "recommend" && "Nothing to recommend yet 🌱"}
-                    {tab === "trending" && "Nothing trending yet 🌱"}
-                  </p>
-                  {tab === "all" && "Check back later for new courses."}
-                  {tab === "recommend" && "Search for a topic, and we'll recommend related courses."}
-                  {tab === "trending" && "Trending courses appear once enrollment picks up."}
-                </div>
-              )}
-
-              {/* === Empty State (Classrooms) === */}
-              {!loading && !error && tab === "classrooms" && visibleClassrooms.length === 0 && (
-                <div className="rounded-[32px] border border-line bg-white/80 backdrop-blur-md p-14 text-center text-sm text-muted shadow-sm">
-                  <p className="text-xl mb-3 text-ink font-medium">No classrooms found 🌱</p>
-                  Try searching for a different subject or cohort.
-                </div>
-              )}
-
-              {/* === Grid View (Courses) === */}
-              {!loading && !error && tab !== "classrooms" && visibleCourses.length > 0 && (
-                <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 items-start">
-                  {visibleCourses.map((course) => (
-                        <CourseCard key={course.id} course={course} />
-                  ))}
-                </div>
-              )}
-
-              {/* === Grid View (Classrooms) === */}
-              {!loading && !error && tab === "classrooms" && visibleClassrooms.length > 0 && (
-                <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 items-start">
-                  {visibleClassrooms.map((c) => (
-                    <div 
-                      key={c.id} 
-                      onClick={() => router.push(`/classrooms/${c.id}`)}
-                      className="rounded-[24px] bg-white/60 border border-white/80 shadow-[0_2px_10px_-4px_rgba(0,0,0,0.05)] backdrop-blur-md p-6 hover:bg-white/90 hover:shadow-md hover:-translate-y-1 transition-all cursor-pointer group"
-                    >
-                      <div className="flex items-start gap-4 mb-4">
-                        <div className="w-12 h-12 rounded-[14px] bg-gradient-to-br from-indigo-500 to-purple-600 text-white flex items-center justify-center shadow-sm shrink-0">
-                          <span className="font-serif font-bold text-lg">
-                            {c.subject_code?.slice(0, 2).toUpperCase() ?? "CL"}
-                          </span>
-                        </div>
-                        <div>
-                          {c.subject_code && (
-                            <p className="text-[10px] font-bold text-indigo-600 uppercase tracking-wider mb-1">
-                              {c.subject_code}
-                            </p>
-                          )}
-                          <p className="text-[16px] font-semibold text-ink leading-tight group-hover:text-accent transition-colors">
-                            {c.title}
-                          </p>
-                        </div>
-                      </div>
-                      
-                      <div className="flex items-center justify-between pt-4 border-t border-line/50">
-                        <div className="flex items-center gap-2.5">
-                          <div className="w-7 h-7 rounded-full bg-ink/10 flex items-center justify-center text-[10px] font-bold text-ink/70">
-                            {c.profiles?.full_name?.charAt(0) ?? "I"}
+              {/* ============================================================== */}
+              {/* KHU VỰC CLASSROOM NẰM NGANG TRÊN CÙNG (CHỈ HIỆN KHI Ở TAB ALL) */}
+              {/* ============================================================== */}
+              {!loading && !error && tab === "all" && visibleClassrooms.length > 0 && (
+                <div className="flex flex-col gap-4">
+                  <div className="flex items-center justify-between">
+                    <h2 className="font-serif text-2xl font-bold text-ink flex items-center gap-2">
+                      <GraduationCap className="text-[#F2994A]" /> Cohorts & Live Classes
+                    </h2>
+                    {visibleClassrooms.length > 3 && (
+                      <button 
+                        onClick={() => router.push("/classrooms")}
+                        className="text-sm font-semibold text-muted hover:text-accent transition-colors flex items-center gap-1"
+                      >
+                        View more <ChevronRight size={16} />
+                      </button>
+                    )}
+                  </div>
+                  
+                  {/* Danh sách Classrooms vuốt ngang (1 dòng) */}
+                  <div className="flex overflow-x-auto gap-5 pb-4 custom-scrollbar snap-x snap-mandatory">
+                    {visibleClassrooms.map((c) => (
+                      <div 
+                        key={c.id} 
+                        onClick={() => router.push(`/classrooms/${c.id}`)}
+                        className="w-[320px] shrink-0 snap-start rounded-[24px] bg-white border border-line/60 shadow-sm p-6 hover:shadow-md hover:-translate-y-1 transition-all cursor-pointer group flex flex-col justify-between"
+                      >
+                        <div className="flex items-start gap-4 mb-5">
+                          <div className="w-12 h-12 rounded-[14px] bg-gradient-to-br from-indigo-500 to-purple-600 text-white flex items-center justify-center shadow-sm shrink-0">
+                            <span className="font-serif font-bold text-lg">
+                              {c.subject_code?.slice(0, 2).toUpperCase() ?? "CL"}
+                            </span>
                           </div>
                           <div>
-                            <p className="text-[9px] text-muted uppercase tracking-wider font-bold mb-0.5">
-                              Lecturer
-                            </p>
-                            <p className="text-[12px] font-semibold text-ink">
-                              {c.profiles?.full_name ?? "Instructor"}
+                            {c.subject_code && (
+                              <p className="text-[10px] font-bold text-indigo-600 uppercase tracking-wider mb-1">
+                                {c.subject_code}
+                              </p>
+                            )}
+                            <p className="text-[15px] font-semibold text-ink leading-tight group-hover:text-indigo-600 transition-colors line-clamp-2">
+                              {c.title}
                             </p>
                           </div>
                         </div>
-                        {c.cohort_label && (
-                          <span className="bg-indigo-50 text-indigo-700 text-[10px] font-bold uppercase tracking-widest px-2.5 py-1 rounded-full">
-                            {c.cohort_label}
-                          </span>
-                        )}
+                        
+                        <div className="flex items-center justify-between pt-4 border-t border-line/50 mt-auto">
+                          <div className="flex items-center gap-2.5">
+                            <div className="w-7 h-7 rounded-full bg-ink/10 flex items-center justify-center text-[10px] font-bold text-ink/70">
+                              {c.profiles?.full_name?.charAt(0) ?? "I"}
+                            </div>
+                            <div>
+                              <p className="text-[9px] text-muted uppercase tracking-wider font-bold mb-0.5">
+                                Lecturer
+                              </p>
+                              <p className="text-[12px] font-semibold text-ink truncate max-w-[100px]">
+                                {c.profiles?.full_name ?? "Instructor"}
+                              </p>
+                            </div>
+                          </div>
+                          {c.cohort_label && (
+                            <span className="bg-indigo-50 text-indigo-700 text-[10px] font-bold uppercase tracking-widest px-2.5 py-1 rounded-full shrink-0">
+                              {c.cohort_label}
+                            </span>
+                          )}
+                        </div>
                       </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* ============================================================== */}
+              {/* KHU VỰC COURSES BÊN DƯỚI (HIỂN THỊ TẤT CẢ THEO GRID)           */}
+              {/* ============================================================== */}
+              {!loading && !error && (
+                <div className="flex flex-col gap-4">
+                  {/* Nếu tab === "all" và có Classrooms thì thêm tiêu đề ngăn cách */}
+                  {tab === "all" && visibleClassrooms.length > 0 && (
+                    <h2 className="font-serif text-2xl font-bold text-ink mt-4 flex items-center gap-2">
+                      <Search className="text-accent" /> Self-paced Courses
+                    </h2>
+                  )}
+
+                  {visibleCourses.length > 0 ? (
+                    <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 items-start">
+                      {visibleCourses.map((course) => (
+                        <CourseCard key={course.id} course={course} />
+                      ))}
                     </div>
-                  ))}
+                  ) : (
+                    // Trạng thái trống (Empty State) cho Courses
+                    <div className="rounded-[32px] border border-line bg-white/80 backdrop-blur-md p-14 text-center text-sm text-muted shadow-sm mt-4">
+                      <p className="text-xl mb-3 text-ink font-medium">
+                        {tab === "all" && "No courses found 🌱"}
+                        {tab === "recommend" && "Nothing to recommend yet 🌱"}
+                        {tab === "trending" && "Nothing trending yet 🌱"}
+                      </p>
+                      {tab === "all" && "Check back later for new courses."}
+                      {tab === "recommend" && "Search for a topic, and we'll recommend related courses."}
+                      {tab === "trending" && "Trending courses appear once enrollment picks up."}
+                    </div>
+                  )}
                 </div>
               )}
 
