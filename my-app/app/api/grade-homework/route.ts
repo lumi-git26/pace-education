@@ -32,7 +32,9 @@ export async function POST(request: Request) {
 
   const { data: submission, error: fetchErr } = await supabase
     .from("homework_submissions")
-    .select("id, content, learner_id, assignment_id, classroom_assignments(title, instructions)")
+    .select(
+      "id, content, learner_id, assignment_id, classroom_assignments(title, instructions)"
+    )
     .eq("id", submissionId)
     .single();
 
@@ -46,44 +48,50 @@ export async function POST(request: Request) {
 
   const assignment: any = submission.classroom_assignments;
 
-  const anthropicRes = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-api-key": process.env.ANTHROPIC_API_KEY!,
-      "anthropic-version": "2023-06-01",
-    },
-    body: JSON.stringify({
-      model: "claude-sonnet-4-6",
-      max_tokens: 500,
-      messages: [
-        {
-          role: "user",
-          content: `You are grading a student homework submission. Respond ONLY with JSON in the form {"score": number (0-100), "feedback": string (2-4 sentences, constructive, specific)}.
+  const prompt = `You are grading a student homework submission. Respond ONLY with raw JSON, no markdown fences, in the form {"score": number (0-100), "feedback": string (2-4 sentences, constructive, specific)}.
 
 Assignment: ${assignment?.title ?? "Untitled"}
 Instructions: ${assignment?.instructions ?? "None provided"}
 
 Student submission:
-${submission.content}`,
-        },
-      ],
-    }),
-  });
+${submission.content}`;
 
-  if (!anthropicRes.ok) {
-    return NextResponse.json({ error: "AI grading failed" }, { status: 502 });
+  const geminiRes = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: {
+          temperature: 0.3,
+          maxOutputTokens: 500,
+        },
+      }),
+    }
+  );
+
+  if (!geminiRes.ok) {
+    const errText = await geminiRes.text();
+    return NextResponse.json(
+      { error: `AI grading failed: ${errText}` },
+      { status: 502 }
+    );
   }
 
-  const aiData = await anthropicRes.json();
-  const rawText = aiData.content?.[0]?.text ?? "{}";
+  const geminiData = await geminiRes.json();
+  const rawText: string =
+    geminiData.candidates?.[0]?.content?.parts?.[0]?.text ?? "{}";
 
   let parsed: { score: number; feedback: string };
   try {
     const cleaned = rawText.replace(/```json|```/g, "").trim();
     parsed = JSON.parse(cleaned);
   } catch {
-    return NextResponse.json({ error: "Could not parse AI response" }, { status: 502 });
+    return NextResponse.json(
+      { error: "Could not parse AI response" },
+      { status: 502 }
+    );
   }
 
   const { error: updateErr } = await supabase
